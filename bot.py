@@ -1,102 +1,93 @@
 # bot.py
 
+import os
+from dotenv import load_dotenv
 from pyrogram import Client, filters
 from pymongo import MongoClient
 from flask import Flask, render_template_string
-import requests
 import threading
-import os
+import requests
 
-# ======= CONFIGURATION =======
-API_ID = 123456               # তোমার Pyrogram API_ID
-API_HASH = "your_api_hash"    # তোমার Pyrogram API_HASH
-BOT_TOKEN = "your_bot_token"  # BotFather থেকে নেওয়া Token
-CHANNEL = "@yourchannel"      # তোমার মুভি চ্যানেল ইউজারনেম
-MONGO_URI = "your_mongo_uri"  # MongoDB URI
-OMDB_API_KEY = "your_omdb_api_key"  # omdbapi.com থেকে নেওয়া API Key
+# === Load environment variables ===
+load_dotenv()
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL = os.getenv("CHANNEL")
+MONGO_URI = os.getenv("MONGO_URI")
+OMDB_API_KEY = os.getenv("OMDB_API_KEY")
 
-# ======= DATABASE SETUP =======
+# === Database setup ===
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["movie_db"]
 collection = db["movies"]
 
-# ======= FLASK WEB SERVER =======
+# === Flask Web App ===
 app = Flask(__name__)
 
 @app.route("/")
 def index():
     movies = list(collection.find().sort("_id", -1))
     html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>🎬 Auto Movie Site</title>
-        <style>
-            body { font-family: Arial; background: #111; color: #eee; }
-            .movie { border: 1px solid #444; margin: 10px; padding: 10px; border-radius: 10px; background: #222; }
-            img { width: 200px; border-radius: 5px; }
-            a { color: #00f7ff; text-decoration: none; }
-        </style>
-    </head>
-    <body>
-        <h1>🎬 Auto Movie Website</h1>
-        {% for m in movies %}
-        <div class="movie">
-            <img src="{{m.poster}}" alt="Poster"><br>
-            <h2>{{m.title}} ({{m.year}})</h2>
-            <p>Language: {{m.language}} | ⭐ IMDb: {{m.rating}}</p>
-            <p>{{m.plot}}</p>
-            <p>
-                <a href="{{m.link}}">📥 Download / 🎬 Watch</a>
-            </p>
-        </div>
-        {% endfor %}
-    </body>
-    </html>
+    <html><head>
+    <title>🎬 Auto Movie Site</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; }
+        .movie { background: #222; border-radius: 10px; padding: 10px; margin: 15px 0; }
+        img { width: 200px; border-radius: 5px; }
+        a { color: #00f7ff; text-decoration: none; }
+    </style></head><body>
+    <h1>📺 Movie List</h1>
+    {% for m in movies %}
+    <div class="movie">
+        <img src="{{m.poster}}"><br>
+        <h2>{{m.title}} ({{m.year}})</h2>
+        <p>Language: {{m.language}} | ⭐ IMDb: {{m.rating}}</p>
+        <p>{{m.plot}}</p>
+        <a href="{{m.link}}">📥 Download / 🎬 Watch</a>
+    </div>
+    {% endfor %}
+    </body></html>
     """
     return render_template_string(html, movies=movies)
 
-# ======= TELEGRAM BOT SETUP =======
+# === Telegram Bot ===
 bot = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-@bot.on_message(filters.channel & filters.chat(CHANNEL))
-async def save_movie(client, message):
-    if not (message.video or message.document):
-        return
-
+@bot.on_message(filters.chat(CHANNEL) & filters.media)
+async def movie_handler(client, message):
     caption = message.caption or ""
-    title_line = caption.split("\n")[0] if caption else "Unknown Movie"
-    print(f"🎬 Found: {title_line}")
+    title_line = caption.split("\n")[0] if caption else "Unknown"
+    print(f"🎬 Processing: {title_line}")
 
-    # OMDb API Call
     try:
         url = f"http://www.omdbapi.com/?t={title_line}&apikey={OMDB_API_KEY}"
-        response = requests.get(url).json()
-        if response.get("Response") != "True":
+        data = requests.get(url).json()
+
+        if data.get("Response") != "True":
             print("❌ Movie not found on OMDb")
             return
 
-        movie_data = {
-            "title": response.get("Title"),
-            "year": response.get("Year"),
-            "language": response.get("Language"),
-            "rating": response.get("imdbRating"),
-            "poster": response.get("Poster"),
-            "plot": response.get("Plot"),
+        movie = {
+            "title": data.get("Title"),
+            "year": data.get("Year"),
+            "language": data.get("Language"),
+            "rating": data.get("imdbRating"),
+            "poster": data.get("Poster"),
+            "plot": data.get("Plot"),
             "link": f"https://t.me/{CHANNEL.strip('@')}/{message.id}"
         }
 
-        if collection.find_one({"title": movie_data["title"], "year": movie_data["year"]}):
-            print("⚠️ Already exists")
-            return
-
-        collection.insert_one(movie_data)
-        print(f"✅ Saved: {movie_data['title']}")
+        if not collection.find_one({"title": movie["title"], "year": movie["year"]}):
+            collection.insert_one(movie)
+            print(f"✅ Saved: {movie['title']}")
+        else:
+            print("⚠️ Already exists.")
 
     except Exception as e:
-        print(f"⚠️ Error: {e}")
+        print(f"🚨 Error: {e}")
 
-# ======= RUN BOTH BOT + WEBSITE =======
+# === Run Bot & Server ===
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=8080)).start()
     bot.run()
