@@ -2,10 +2,11 @@ import os
 import threading
 import requests
 import logging
+import re # Added for regular expressions
 from flask import Flask, render_template_string
 from pyrogram import Client, filters
 from pymongo import MongoClient
-from pymongo.errors import PyMongoError # ConnectionError has been removed from here
+from pymongo.errors import PyMongoError
 
 # ==================== Configuration Loading and Validation ====================
 # Define required environment variables
@@ -149,26 +150,83 @@ async def save_movie(client, message):
     and saves the movie information to MongoDB.
     """
     caption = message.caption or ""
-    title_line = caption.split("\n")[0].strip()
+    raw_title = caption.split("\n")[0].strip()
 
-    if not title_line:
+    if not raw_title:
         logger.info(f"Skipping message {message.id} in {CHANNEL}: No title found in caption.")
         return
 
-    logger.info(f"🎬 Processing message {message.id} for movie: {title_line}")
+    # ============ START: Title Cleaning Logic ============
+    title_to_search = raw_title
+
+    # Extract year if present (e.g., Movie Title (2022) or Movie.Title.2022)
+    year = None
+    year_match = re.search(r'\(?(\d{4})\)?', title_to_search)
+    if year_match:
+        year = year_match.group(1)
+        # Remove the year and its surrounding brackets/dots from the title
+        title_to_search = re.sub(r'[\(\[\.]?' + re.escape(year_match.group(0)) + r'[\)\]\.]?', ' ', title_to_search).strip()
+
+    # Define patterns to remove common file name noise
+    patterns_to_remove = [
+        r'\b\d{3,4}p\b',                                     # 720p, 1080p, 480p (resolution)
+        r'\b(?:WEB-DL|HDRip|BluRay|DVDRip|BRRip|WEBRip|HDTV|BDRip|Rip)\b', # source quality
+        r'\b(?:HEVC|x264|x265|AAC|AC3|DD5\.1|DTS|XviD|MP4|MKV|AVI|FLAC|H\.264|H\.265)\b', # codec/audio/container
+        r'\b(?:HQ Line Audio|Line Audio|Dubbed|ESubs|Subbed|TG|www\.[a-z0-9\-\.]+\.(?:com|net|org))\b', # other irrelevant words/watermarks
+        r'\b(?:Hindi|Bengali|English|Multi|Dual Audio|Org Audio)\b', # language
+        r'\[.*?\]',                                         # [কিছু টেক্সট] যেমন [www.example.com]
+        r'\(.*?\)',                                         # (কিছু টেক্সট) যদি এটি বছর না হয় এবং ব্র্যাকেটে থাকে
+        r'-\s*\d+',                                         # - 1, - 2 (যেমন পার্ট নম্বর)
+        r'\s*[\._-]\s*',                                    # Dot, underscore, dash that are not word separators
+        r'trailer', r'full movie', r'sample',               # common extra words
+        r'\b(?:x264|x265)\b-\w+',                            # example: x264-EVO, x265-RARBG
+        r'repack', r'proper', r'uncut', r'extended', r'director\'s cut', # version indicators
+        r'\b(?:truehd|dts-hd|ac3|eac3|doby)\b',              # more audio formats
+        r'\b(?:imax|hdr|uhd|4k|fhd|hd)\b',                   # more quality indicators
+    ]
+
+    for pattern in patterns_to_remove:
+        title_to_search = re.sub(pattern, ' ', title_to_search, flags=re.IGNORECASE).strip()
+
+    # Clean up multiple spaces and trim whitespace
+    title_to_search = re.sub(r'\s{2,}', ' ', title_to_search).strip()
+
+    # Final check: if cleaning made the title too short or empty, try a simpler approach
+    # e.g., take text before first common separator or bracket if the cleaned title is bad
+    if len(title_to_search) < 3 or re.match(r'^\W*$', title_to_search): # If title is too short or only non-word chars
+        logger.warning(f"Cleaned title '{title_to_search}' is too short/invalid for '{raw_title}'. Trying simpler parse.")
+        # Attempt to get text before first common separator or bracket for a fallback title
+        fallback_match = re.match(r'([^.\[\(]+)', raw_title)
+        if fallback_match:
+            title_to_search = fallback_match.group(1).strip()
+        else:
+            title_to_search = raw_title.split("(")[0].strip() # Last resort, text before first '('
+
+    # If after all attempts, title is still empty or too generic, use original but log warning
+    if not title_to_search or len(title_to_search) < 3:
+        title_to_search = raw_title.split("\n")[0].strip() # Use original first line as last resort
+        logger.warning(f"Could not effectively clean title for OMDb. Using original first line: '{title_to_search}'")
+
+    # ============ END: Title Cleaning Logic ============
+
+    # OMDB Fetch using the cleaned title and extracted year
+    omdb_url = f"http://www.omdbapi.com/?t={title_to_search}&apikey={OMDB_API_KEY}"
+    if year:
+        omdb_url += f"&y={year}" # Add year parameter if available
+
+    logger.info(f"🎬 Attempting to process: '{raw_title}' (Cleaned for OMDb: '{title_to_search}' | Year: {year or 'N/A'})")
 
     # Fetch movie details from OMDb
-    omdb_url = f"http://www.omdbapi.com/?t={title_line}&apikey={OMDB_API_KEY}"
     try:
         r = requests.get(omdb_url, timeout=10) # Added timeout for robustness
         r.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
         data = r.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching from OMDb for '{title_line}': {e}")
+        logger.error(f"Error fetching from OMDb for '{title_to_search}': {e}")
         return
 
     if data.get("Response") != "True":
-        logger.warning(f"❌ Movie '{title_line}' not found in OMDb or API error: {data.get('Error', 'Unknown Error')}")
+        logger.warning(f"❌ Movie '{title_to_search}' (from '{raw_title}') not found in OMDb or API error: {data.get('Error', 'Unknown Error')}")
         return
 
     movie_data = {
