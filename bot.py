@@ -3,12 +3,13 @@ import threading
 import requests
 import logging
 import re
-from flask import Flask, render_template_string, abort, request, redirect, url_for # Added request, redirect, url_for for search
+from flask import Flask, render_template_string, abort, request, redirect, url_for, session, flash # Added session, flash
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from bson.objectid import ObjectId
+from functools import wraps # For login_required decorator
 
 # ==================== Configuration Loading and Validation ====================
 REQUIRED_ENV_VARS = [
@@ -19,7 +20,10 @@ REQUIRED_ENV_VARS = [
     "MONGO_URI",
     "OMDB_API_KEY",
     "BOT_USERNAME", # Your bot's username (e.g., MyMovieBot)
-    "WEBSITE_URL"   # Your website's public URL (e.g., https://yourwebsite.render.com)
+    "WEBSITE_URL",  # Your website's public URL (e.g., https://yourwebsite.render.com)
+    "SECRET_KEY",   # For Flask session management
+    "ADMIN_USERNAME", # Admin panel username
+    "ADMIN_PASSWORD"  # Admin panel password
 ]
 
 env_vars = {}
@@ -43,6 +47,9 @@ MONGO_URI = env_vars["MONGO_URI"]
 OMDB_API_KEY = env_vars["OMDB_API_KEY"]
 BOT_USERNAME = env_vars["BOT_USERNAME"].lstrip('@')
 WEBSITE_URL = env_vars["WEBSITE_URL"].rstrip('/') # Remove trailing slash
+SECRET_KEY = env_vars["SECRET_KEY"]
+ADMIN_USERNAME = env_vars["ADMIN_USERNAME"]
+ADMIN_PASSWORD = env_vars["ADMIN_PASSWORD"]
 
 try:
     DELETE_AFTER = int(os.environ.get("DELETE_AFTER", 300))
@@ -70,6 +77,17 @@ except PyMongoError as e:
 
 # ==================== Flask Site ====================
 app = Flask(__name__)
+app.secret_key = SECRET_KEY # Set secret key for session management
+
+# Decorator to check if admin is logged in
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session or not session['logged_in']:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # HTML Snippets for reusability and cleaner code
 HEADER_HTML = """
@@ -104,6 +122,8 @@ BASE_CSS = """
         --button-hover: #0056b3;
         --border-color: #333;
         --card-shadow: rgba(0, 0, 0, 0.4);
+        --danger-color: #dc3545;
+        --success-color: #28a745;
     }
 
     * {
@@ -118,6 +138,14 @@ BASE_CSS = """
         color: var(--text-color);
         line-height: 1.6;
         padding-bottom: 50px; /* Space for potential footer/nav */
+    }
+
+    a {
+        color: var(--primary-color);
+        text-decoration: none;
+    }
+    a:hover {
+        text-decoration: underline;
     }
 
     .container {
@@ -603,6 +631,130 @@ BASE_CSS = """
         text-decoration: underline;
     }
 
+    /* Admin Styles */
+    .admin-container {
+        max-width: 900px;
+        margin: 50px auto;
+        padding: 30px;
+        background: var(--bg-medium);
+        border-radius: 10px;
+        box-shadow: 0 5px 20px var(--card-shadow);
+    }
+    .admin-container h1, .admin-container h2 {
+        color: var(--primary-color);
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    .admin-form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    .admin-form label {
+        font-weight: bold;
+        color: var(--text-color);
+        margin-bottom: 5px;
+        display: block;
+    }
+    .admin-form input[type="text"],
+    .admin-form input[type="password"],
+    .admin-form textarea {
+        width: 100%;
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-light);
+        color: var(--text-color);
+        font-size: 1em;
+        outline: none;
+    }
+    .admin-form input[type="text"]:focus,
+    .admin-form input[type="password"]:focus,
+    .admin-form textarea:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(0, 247, 255, 0.3);
+    }
+    .admin-form button {
+        background-color: var(--button-bg);
+        color: white;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1.1em;
+        font-weight: bold;
+        transition: background-color 0.3s ease;
+    }
+    .admin-form button:hover {
+        background-color: var(--button-hover);
+    }
+    .admin-form .danger-button {
+        background-color: var(--danger-color);
+    }
+    .admin-form .danger-button:hover {
+        background-color: #bb2d3b;
+    }
+
+    .message {
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 5px;
+        font-weight: bold;
+    }
+    .message.success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    .message.error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 30px;
+    }
+    .admin-table th, .admin-table td {
+        border: 1px solid var(--border-color);
+        padding: 10px;
+        text-align: left;
+    }
+    .admin-table th {
+        background-color: var(--bg-light);
+        color: var(--primary-color);
+    }
+    .admin-table td {
+        background-color: var(--bg-dark);
+        vertical-align: top;
+    }
+    .admin-table .actions a {
+        margin-right: 10px;
+        color: var(--button-bg);
+    }
+    .admin-table .actions a:hover {
+        text-decoration: none;
+        opacity: 0.8;
+    }
+    .admin-table .actions form {
+        display: inline;
+    }
+    .admin-table .actions button {
+        background: none;
+        border: none;
+        color: var(--danger-color);
+        cursor: pointer;
+        font-size: 1em;
+        padding: 0;
+        text-decoration: underline;
+        transition: color 0.2s ease;
+    }
+    .admin-table .actions button:hover {
+        color: #bb2d3b;
+    }
+
 
     /* Media Queries */
     @media (max-width: 768px) {
@@ -711,6 +863,13 @@ BASE_CSS = """
             width: 90%;
             max-width: 300px;
         }
+        .admin-table th, .admin-table td {
+            font-size: 0.85em;
+            padding: 8px;
+        }
+        .admin-table .actions a, .admin-table .actions button {
+            font-size: 0.8em;
+        }
     }
     </style>
 """
@@ -797,7 +956,7 @@ def home():
                 {{% else %}}
                 <div class="no-results">
                     <p>No movies found yet. Share some movies in your Telegram channel!</p>
-                    <a href="{{ WEBSITE_URL }}">Refresh Page</a>
+                    <p><a href="{{ WEBSITE_URL }}">Refresh Page</a></p>
                 </div>
                 {{% endif %}}
             </div>
@@ -1020,6 +1179,265 @@ def movie_detail(movie_id):
         logger.error(f"Error rendering movie detail page for ID {movie_id}: {e}")
         return "An internal server error occurred.", 500
 
+# ==================== Admin Panel ====================
+
+@app.route("/admin", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+
+        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+            session['logged_in'] = True
+            flash('Logged in successfully!', 'success')
+            return redirect(url_for('admin_dashboard'))
+        else:
+            flash('Invalid credentials. Please try again.', 'error')
+    
+    # Login HTML
+    login_html = f"""
+    <html>
+    <head>
+        <title>Admin Login</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        {BASE_CSS}
+    </head>
+    <body>
+        <div class="container admin-container">
+            <h1>Admin Login</h1>
+            {{% with messages = get_flashed_messages(with_categories=true) %}}
+                {{% if messages %}}
+                    <ul class="flashes">
+                    {{% for category, message in messages %}}
+                        <li class="message {{{{ category }}}}">{{{{ message }}}}</li>
+                    {{% endfor %}}
+                    </ul>
+                {{% endif %}}
+            {{% endwith %}}
+            <form method="post" action="/admin" class="admin-form">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+                <button type="submit">Log In</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(login_html)
+
+@app.route("/admin/dashboard")
+@login_required
+def admin_dashboard():
+    try:
+        movies = list(col.find().sort("_id", -1))
+        
+        dashboard_html = f"""
+        <html>
+        <head>
+            <title>Admin Dashboard</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            {BASE_CSS}
+        </head>
+        <body>
+            <header class="main-header">
+                <div class="header-inner">
+                    <a href="/admin/dashboard" class="logo">Admin Panel</a>
+                    <nav>
+                        <a href="/" style="margin-left: 20px; color: var(--text-color);">View Site</a> |
+                        <a href="/admin/logout" style="margin-left: 10px; color: var(--danger-color);">Logout</a>
+                    </nav>
+                </div>
+            </header>
+
+            <div class="container admin-container">
+                <h1>Movie Management</h1>
+                {{% with messages = get_flashed_messages(with_categories=true) %}}
+                    {{% if messages %}}
+                        <ul class="flashes">
+                        {{% for category, message in messages %}}
+                            <li class="message {{{{ category }}}}">{{{{ message }}}}</li>
+                        {{% endfor %}}
+                        </ul>
+                    {{% endif %}}
+                {{% endwith %}}
+
+                {{% if movies %}}
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Year</th>
+                            <th>Rating</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{% for movie in movies %}}
+                        <tr>
+                            <td>{{{{ movie.title }}}}</td>
+                            <td>{{{{ movie.year }}}}</td>
+                            <td>{{{{ movie.rating }}}}</td>
+                            <td class="actions">
+                                <a href="/admin/edit/{{{{ movie._id }}}}">Edit</a>
+                                <form action="/admin/delete/{{{{ movie._id }}}}" method="post" onsubmit="return confirm('Are you sure you want to delete this movie?');">
+                                    <button type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {{% endfor %}}
+                    </tbody>
+                </table>
+                {{% else %}}
+                <p style="text-align: center; color: #aaa;">No movies in the database yet.</p>
+                {{% endif %}}
+            </div>
+        </body>
+        </html>
+        """
+        return render_template_string(dashboard_html, movies=movies)
+    except Exception as e:
+        logger.error(f"Error rendering admin dashboard: {e}")
+        flash('An error occurred loading dashboard.', 'error')
+        return "An internal server error occurred in admin dashboard.", 500
+
+@app.route("/admin/edit/<movie_id>", methods=["GET", "POST"])
+@login_required
+def admin_edit_movie(movie_id):
+    try:
+        movie_obj_id = ObjectId(movie_id)
+        movie = col.find_one({"_id": movie_obj_id})
+
+        if not movie:
+            abort(404)
+
+        if request.method == "POST":
+            # Update movie data from form
+            updated_data = {
+                "title": request.form["title"],
+                "year": request.form["year"],
+                "language": request.form["language"],
+                "rating": request.form["rating"],
+                "poster": request.form["poster"],
+                "plot": request.form["plot"],
+                "genre": request.form.get("genre"),
+                "runtime": request.form.get("runtime"),
+                "telegram_link": request.form.get("telegram_link"),
+                "file_id": request.form.get("file_id"),
+                "external_watch_link": request.form.get("external_watch_link"),
+                "quality": request.form.get("quality")
+            }
+            # Remove empty strings for optional fields
+            updated_data = {k: v if v else None for k, v in updated_data.items()}
+            
+            col.update_one({"_id": movie_obj_id}, {"$set": updated_data})
+            flash('Movie updated successfully!', 'success')
+            logger.info(f"Movie '{movie_id}' updated by admin.")
+            return redirect(url_for('admin_dashboard'))
+
+        edit_html = f"""
+        <html>
+        <head>
+            <title>Edit Movie</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            {BASE_CSS}
+        </head>
+        <body>
+            <header class="main-header">
+                <div class="header-inner">
+                    <a href="/admin/dashboard" class="logo">Admin Panel</a>
+                    <nav>
+                        <a href="/" style="margin-left: 20px; color: var(--text-color);">View Site</a> |
+                        <a href="/admin/logout" style="margin-left: 10px; color: var(--danger-color);">Logout</a>
+                    </nav>
+                </div>
+            </header>
+
+            <div class="container admin-container">
+                <h1>Edit Movie: {{{{ movie.title }}}}</h1>
+                {{% with messages = get_flashed_messages(with_categories=true) %}}
+                    {{% if messages %}}
+                        <ul class="flashes">
+                        {{% for category, message in messages %}}
+                            <li class="message {{{{ category }}}}">{{{{ message }}}}</li>
+                        {{% endfor %}}
+                        </ul>
+                    {{% endif %}}
+                {{% endwith %}}
+                <form method="post" class="admin-form">
+                    <label for="title">Title:</label>
+                    <input type="text" id="title" name="title" value="{{{{ movie.title or '' }}}}" required>
+
+                    <label for="year">Year:</label>
+                    <input type="text" id="year" name="year" value="{{{{ movie.year or '' }}}}" required>
+
+                    <label for="language">Language:</label>
+                    <input type="text" id="language" name="language" value="{{{{ movie.language or '' }}}}" required>
+
+                    <label for="rating">IMDb Rating:</label>
+                    <input type="text" id="rating" name="rating" value="{{{{ movie.rating or '' }}}}" required>
+
+                    <label for="poster">Poster URL:</label>
+                    <input type="text" id="poster" name="poster" value="{{{{ movie.poster or '' }}}}" required>
+
+                    <label for="plot">Plot:</label>
+                    <textarea id="plot" name="plot" rows="5" required>{{{{ movie.plot or '' }}}}</textarea>
+                    
+                    <label for="genre">Genre (Comma Separated):</label>
+                    <input type="text" id="genre" name="genre" value="{{{{ movie.genre or '' }}}}">
+
+                    <label for="runtime">Runtime (e.g., 120 min):</label>
+                    <input type="text" id="runtime" name="runtime" value="{{{{ movie.runtime or '' }}}}">
+
+                    <label for="telegram_link">Telegram Link:</label>
+                    <input type="text" id="telegram_link" name="telegram_link" value="{{{{ movie.telegram_link or '' }}}}">
+
+                    <label for="file_id">Telegram File ID (for Bot Download):</label>
+                    <input type="text" id="file_id" name="file_id" value="{{{{ movie.file_id or '' }}}}">
+
+                    <label for="external_watch_link">External Watch Link (Player):</label>
+                    <input type="text" id="external_watch_link" name="external_watch_link" value="{{{{ movie.external_watch_link or '' }}}}">
+
+                    <label for="quality">Quality (e.g., Blu-ray, 1080p):</label>
+                    <input type="text" id="quality" name="quality" value="{{{{ movie.quality or '' }}}}">
+
+                    <button type="submit">Save Changes</button>
+                    <a href="/admin/dashboard" style="display: block; text-align: center; margin-top: 10px; color: var(--primary-color);">Cancel</a>
+                </form>
+            </div>
+        </body>
+        </html>
+        """
+        return render_template_string(edit_html, movie=movie)
+    except Exception as e:
+        logger.error(f"Error rendering/processing edit for movie {movie_id}: {e}")
+        flash('An error occurred while editing the movie.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+@app.route("/admin/delete/<movie_id>", methods=["POST"])
+@login_required
+def admin_delete_movie(movie_id):
+    try:
+        movie_obj_id = ObjectId(movie_id)
+        result = col.delete_one({"_id": movie_obj_id})
+        if result.deleted_count > 0:
+            flash('Movie deleted successfully!', 'success')
+            logger.info(f"Movie '{movie_id}' deleted by admin.")
+        else:
+            flash('Movie not found or could not be deleted.', 'error')
+            logger.warning(f"Attempted to delete non-existent movie '{movie_id}'.")
+    except Exception as e:
+        logger.error(f"Error deleting movie {movie_id}: {e}")
+        flash('An error occurred while deleting the movie.', 'error')
+    return redirect(url_for('admin_dashboard'))
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop('logged_in', None)
+    flash('You have been logged out.', 'success')
+    return redirect(url_for('admin_login'))
+
 # ==================== Telegram Bot ====================
 bot = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -1164,7 +1582,13 @@ async def save_movie(client, message):
                 "file_id": file_id,
                 "telegram_link": movie_data["telegram_link"],
                 "external_watch_link": movie_data["external_watch_link"],
-                "quality": movie_data["quality"]
+                "quality": movie_data["quality"],
+                "poster": movie_data["poster"], # Update poster in case it changed or was missing
+                "rating": movie_data["rating"],
+                "plot": movie_data["plot"],
+                "genre": movie_data["genre"],
+                "runtime": movie_data["runtime"],
+                "language": movie_data["language"]
             }
             # Only update if new data is not None or empty string, to avoid overwriting with empty values
             update_set = {k: v for k, v in update_fields.items() if v is not None and v != ''}
@@ -1174,7 +1598,7 @@ async def save_movie(client, message):
                     {"_id": existing_movie["_id"]},
                     {"$set": update_set}
                 )
-                logger.info(f"⚠️ Movie '{movie_data['title']} ({movie_data['year']})' already exists. Updated file_id, telegram_link, external_watch_link, quality.")
+                logger.info(f"⚠️ Movie '{movie_data['title']} ({movie_data['year']})' already exists. Updated data.")
             else:
                 logger.info(f"⚠️ Movie '{movie_data['title']} ({movie_data['year']})' already exists. No new data to update.")
         else:
