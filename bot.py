@@ -5,7 +5,7 @@ import logging
 from flask import Flask, render_template_string
 from pyrogram import Client, filters
 from pymongo import MongoClient
-from pymongo.errors import ConnectionError, PyMongoError
+from pymongo.errors import PyMongoError # ConnectionError has been removed from here
 
 # ==================== Configuration Loading and Validation ====================
 # Define required environment variables
@@ -60,13 +60,10 @@ try:
     db = mongo["movie_db"]
     col = db["movies"]
     # Test connection
-    mongo.admin.command('ping')
+    mongo.admin.command('ping') # A simple command to verify connection
     logger.info("MongoDB connected successfully.")
-except ConnectionError as e:
-    logger.error(f"Could not connect to MongoDB: {e}. Please check MONGO_URI.")
-    exit(1) # Exit if database connection fails
-except PyMongoError as e:
-    logger.error(f"MongoDB error: {e}. Please check MongoDB server status or MONGO_URI.")
+except PyMongoError as e: # Catch all PyMongo-related errors, including connection issues
+    logger.error(f"MongoDB connection or operation error: {e}. Please check MONGO_URI and MongoDB server status.")
     exit(1)
 
 # ==================== Flask Site ====================
@@ -214,4 +211,3 @@ if __name__ == "__main__":
     logger.info("Starting Telegram bot...")
     bot.run()
     logger.info("Telegram bot stopped.")
-
