@@ -24,11 +24,12 @@ collection = db["movies"]
 bot = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 def extract_info(text):
-    pattern = r"(.*?)(?:\s*(\d{4}))?\s*(?:\||-|–)?\s*(\d{3,4}p)"
-    match = re.search(pattern, text, re.IGNORECASE)
+    clean_text = re.sub(r"[^\w\s\d]|_", " ", text)
+    clean_text = re.sub(r"\s+", " ", clean_text).strip()
+    match = re.search(r"(.+?)\s*(\d{4})\s*(\d{3,4}p)", clean_text, re.IGNORECASE)
     if match:
         title = match.group(1).strip()
-        year = match.group(2) or "0000"
+        year = match.group(2)
         quality = match.group(3)
         return title, year, quality
     return None, None, None
@@ -60,6 +61,8 @@ async def save_movie(client, message):
     link = f"https://t.me/{CHANNEL_USERNAME}/{message.id}"
     tmdb_info = get_tmdb_info(title, year)
 
+    slug = slugify(title) + f"-{year}"
+
     existing = collection.find_one({"title": title, "year": year})
     quality_entry = {"quality": quality, "download_url": link, "watch_url": link}
 
@@ -80,6 +83,7 @@ async def save_movie(client, message):
             "language": "Unknown",
             "overview": tmdb_info["overview"],
             "poster_url": tmdb_info["poster_url"],
+            "slug": slug,
             "qualities": [quality_entry]
         })
     print(f"[✔] Saved: {title} ({year}) - {quality}")
@@ -89,33 +93,93 @@ app = Flask(__name__)
 
 INDEX_HTML = """
 <!DOCTYPE html>
-<html><head><title>Movie List</title></head><body><h1>Movies</h1><ul>{% for movie in movies %}<li><a href="/movie/{{ movie.slug }}">{{ movie.title }} ({{ movie.year }})</a></li>{% endfor %}</ul></body></html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+  <title>MovieZone</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #111; color: #fff; margin: 0; padding: 20px; }
+    h1 { text-align: center; margin-bottom: 30px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; }
+    .card { background: #222; border-radius: 10px; padding: 10px; text-align: center; text-decoration: none; color: white; transition: 0.3s; }
+    .card:hover { background: #333; }
+    .card img { width: 100%; border-radius: 6px; height: 220px; object-fit: cover; }
+    .card-title { margin-top: 10px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>MovieZone</h1>
+  <div class=\"grid\">
+    {% for movie in movies %}
+    <a href=\"/movie/{{ movie.slug }}\" class=\"card\">
+      <img src=\"{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}\" alt=\"Poster\">
+      <div class=\"card-title\">{{ movie.title }}<br>({{ movie.year }})</div>
+    </a>
+    {% endfor %}
+  </div>
+</body>
+</html>
 """
 
 MOVIE_HTML = """
 <!DOCTYPE html>
-<html><head><title>{{ movie.title }}</title></head><body><h1>{{ movie.title }} ({{ movie.year }})</h1><img src="{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}"><p>{{ movie.overview or 'No description available.' }}</p><ul>{% for q in movie.qualities %}<li>{{ q.quality }}: <a href="{{ q.watch_url }}">Watch</a> | <a href="{{ q.download_url }}">Download</a></li>{% endfor %}</ul><a href="/">Back</a></body></html>
-"""
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+  <title>{{ movie.title }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #111; color: #fff; padding: 20px; }
+    a { color: #1e90ff; }
+    .container { max-width: 800px; margin: auto; }
+    img { width: 100%; max-width: 300px; border-radius: 10px; }
+    table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+    th, td { padding: 10px; border-bottom: 1px solid #444; text-align: center; }
+    h1 { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class=\"container\">
+    <a href=\"/\">← Back to Home</a>
+    <h1>{{ movie.title }} ({{ movie.year }})</h1>
+    <img src=\"{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}\" alt=\"Poster\">
+    <p>{{ movie.overview }}</p>
 
-def get_slug(title, year):
-    return f"{slugify(title)}-{year}"
+    <h2>Available Qualities</h2>
+    <table>
+      <tr><th>Quality</th><th>Watch</th><th>Download</th></tr>
+      {% for q in movie.qualities %}
+      <tr>
+        <td>{{ q.quality }}</td>
+        <td><a href=\"{{ q.watch_url }}\" target=\"_blank\">▶️ Watch</a></td>
+        <td><a href=\"{{ q.download_url }}\" target=\"_blank\">⬇️ Download</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</body>
+</html>
+"""
 
 @app.route("/")
 def home():
     movies = list(collection.find())
-    for m in movies:
-        m["slug"] = get_slug(m["title"], m["year"])
     return render_template_string(INDEX_HTML, movies=movies)
 
 @app.route("/movie/<path:slug>")
 def movie_detail(slug):
     try:
-        title_part = slug.rsplit("-", 1)[0]
+        title_part = slug.rsplit("-", 1)[0].replace("-", " ").strip()
         year_part = slug.rsplit("-", 1)[1]
     except:
         abort(404)
 
-    movie = collection.find_one({"year": year_part, "title": {"$regex": f"^{re.escape(title_part)}$", "$options": "i"}})
+    movie = collection.find_one({
+        "year": year_part,
+        "title": {"$regex": f"^{re.escape(title_part)}$", "$options": "i"}
+    })
+
     if not movie:
         abort(404)
     movie["slug"] = slug
