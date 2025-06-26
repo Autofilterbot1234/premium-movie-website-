@@ -1,6 +1,7 @@
-pyrogram
-flask
-pymongo
-requests
-python-slugify
 tgcrypto
+pyrogram
+pymongo
+Flask
+python-slugify
+requests
+python-dotenv
