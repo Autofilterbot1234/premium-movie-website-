@@ -84,35 +84,17 @@ async def save_movie(client, message):
         })
     print(f"[✔] Saved: {title} ({year}) - {quality}")
 
-# ===== Flask Web Setup =====
+# ===== Flask Setup =====
 app = Flask(__name__)
 
 INDEX_HTML = """
 <!DOCTYPE html>
-<html><head><title>Movie List</title></head><body><h1>Movies</h1>
-<ul>
-{% for movie in movies %}
-  <li><a href="/movie/{{ movie.slug }}">{{ movie.title }} ({{ movie.year }})</a></li>
-{% endfor %}
-</ul></body></html>
+<html><head><title>Movie List</title></head><body><h1>Movies</h1><ul>{% for movie in movies %}<li><a href="/movie/{{ movie.slug }}">{{ movie.title }} ({{ movie.year }})</a></li>{% endfor %}</ul></body></html>
 """
 
 MOVIE_HTML = """
 <!DOCTYPE html>
-<html><head><title>{{ movie.title }}</title></head><body>
-<h1>{{ movie.title }} ({{ movie.year }})</h1>
-<img src="{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}"><br>
-<p>{{ movie.overview or 'No description available.' }}</p>
-<ul>
-{% for q in movie.qualities %}
-  <li>{{ q.quality }}:
-    <a href="{{ q.watch_url }}">▶️ Watch</a> |
-    <a href="{{ q.download_url }}">⬇️ Download</a>
-  </li>
-{% endfor %}
-</ul>
-<a href="/">Back</a>
-</body></html>
+<html><head><title>{{ movie.title }}</title></head><body><h1>{{ movie.title }} ({{ movie.year }})</h1><img src="{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}"><p>{{ movie.overview or 'No description available.' }}</p><ul>{% for q in movie.qualities %}<li>{{ q.quality }}: <a href="{{ q.watch_url }}">Watch</a> | <a href="{{ q.download_url }}">Download</a></li>{% endfor %}</ul><a href="/">Back</a></body></html>
 """
 
 def get_slug(title, year):
@@ -139,7 +121,7 @@ def movie_detail(slug):
     movie["slug"] = slug
     return render_template_string(MOVIE_HTML, movie=movie)
 
-# ===== Run Flask + Bot together =====
+# ===== Run Flask in background, Bot in main =====
 def run_flask():
     app.run(host="0.0.0.0", port=5000)
 
