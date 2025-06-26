@@ -4,8 +4,9 @@ from pyrogram import Client, filters
 import pymongo
 import re
 import requests
-from flask import Flask, request, redirect, abort, render_template_string
+from flask import Flask, request, redirect, abort, render_template_string, session, url_for
 from slugify import slugify # নিশ্চিত করুন এটি ইনস্টল করা আছে: pip install python-slugify
+import os # সেশন সিক্রেট কী তৈরি করার জন্য
 
 # ===== CONFIGURATION =====
 MONGO_URI = "mongodb+srv://manogog673:manogog673@cluster0.ot1qt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -15,7 +16,7 @@ BOT_USERNAME = "CtgAutoPostBot" # আপনার বটের সঠিক ই�
 API_ID = 22697010
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
-ADMIN_TOKEN = "admin123"
+ADMIN_PASSWORD = "your_strong_admin_password_here" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
 
 # ===== MongoDB Setup =====
 mongo = pymongo.MongoClient(MONGO_URI)
@@ -357,6 +358,22 @@ ADMIN_HTML = """
             color: white;
             transform: translateY(-2px);
         }
+        .logout-btn {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background: #6c757d;
+            color: white;
+            text-align: center;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            max-width: 150px;
+            transition: background 0.2s;
+        }
+        .logout-btn:hover {
+            background: #5a6268;
+        }
         /* Responsive adjustments */
         @media (max-width: 600px) {
             body {
@@ -385,13 +402,46 @@ ADMIN_HTML = """
         {% for movie in movies %}
         <li>
             <span>{{ movie.title }} ({{ movie.year }})</span>
-            <a href='/admin/delete/{{ movie._id }}?token={{ token }}'>❌ Delete</a>
+            <a href='{{ url_for("delete", mid=movie._id) }}'>❌ Delete</a>
         </li>
         {% endfor %}
     </ul>
+    <a href="{{ url_for('admin_logout') }}" class="logout-btn">Logout</a>
 </body>
 </html>
 """
+
+LOGIN_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #333; }
+        .login-container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 90%; }
+        h1 { color: #007bff; margin-bottom: 25px; font-size: 2em; }
+        input[type="password"] { width: calc(100% - 20px); padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 5px; font-size: 1em; }
+        button { background: #007bff; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background 0.3s ease; }
+        button:hover { background: #0056b3; }
+        .error-message { color: #dc3545; margin-top: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Admin Login</h1>
+        <form action="{{ url_for('admin_login') }}" method="post">
+            <input type="password" name="password" placeholder="Enter Admin Password" required>
+            <button type="submit">Login</button>
+        </form>
+        {% if error %}
+            <p class="error-message">{{ error }}</p>
+        {% endif %}
+    </div>
+</body>
+</html>
+"""
+
 
 # ===== Utility Functions =====
 def extract_info(text):
@@ -415,7 +465,7 @@ def get_tmdb_info(title, year):
         print(f"Error fetching TMDB info: {e}") # ডিবাগিং এর জন্য এরর প্রিন্ট করা হলো
     return {"poster_url": "", "overview": ""}
 
-# ===== Pyrogram Bot Handler =====
+# ===== Pyrogram Bot Handler for Channel Posts =====
 @bot.on_message(filters.channel & (filters.video | filters.document))
 async def save_movie(client, message):
     if not message.caption:
@@ -434,7 +484,6 @@ async def save_movie(client, message):
 
     # ডেটাবেসে একই টাইটেল এবং সাল এর মুভি আছে কিনা চেক করুন
     existing = collection.find_one({"title": title, "year": year}) 
-    # বিকল্প: {"slug": movie_slug} দিয়েও চেক করতে পারেন যদি স্ল্যাগ ইউনিক রাখতে চান
 
     quality_entry = {"quality": quality, "file_id": file_id}
 
@@ -466,20 +515,57 @@ async def save_movie(client, message):
         })
         print(f"Added new movie: {title} ({year})") # ডিবাগিং
 
+# ===== Pyrogram Bot Handler for /start command =====
+@bot.on_message(filters.private & filters.command("start"))
+async def start_command_handler(client, message):
+    if len(message.command) > 1:
+        action_param = message.command[1] 
+        
+        if action_param.startswith("stream_"):
+            file_id = action_param.replace("stream_", "", 1)
+            try:
+                await client.send_document(
+                    chat_id=message.chat.id,
+                    file_id=file_id,
+                    caption="আপনার অনুরোধ করা ফাইলটি এখানে! 🍿\n\nযদি এটি ভিডিও হয়, তাহলে আপনি এটি স্ট্রিম করতে পারবেন।"
+                )
+                print(f"Sent stream file {file_id} to {message.chat.id}")
+            except Exception as e:
+                await message.reply_text(f"দুঃখিত, ফাইলটি স্ট্রিম করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন। এরর: {e}")
+                print(f"Error sending stream file {file_id}: {e}")
+
+        elif action_param.startswith("download_"):
+            file_id = action_param.replace("download_", "", 1)
+            try:
+                await client.send_document(
+                    chat_id=message.chat.id,
+                    file_id=file_id,
+                    caption="আপনার অনুরোধ করা ফাইলটি এখানে! 📥\n\nআপনি এটি ডাউনলোড করতে পারবেন।"
+                )
+                print(f"Sent download file {file_id} to {message.chat.id}")
+            except Exception as e:
+                await message.reply_text(f"দুঃখিত, ফাইলটি ডাউনলোড করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন। এরর: {e}")
+                print(f"Error sending download file {file_id}: {e}")
+        else:
+            await message.reply_text("স্বাগতম! আপনি এখানে আপনার পছন্দের মুভি দেখতে বা ডাউনলোড করতে পারবেন।")
+    else:
+        await message.reply_text("স্বাগতম! আপনি এখানে আপনার পছন্দের মুভি দেখতে বা ডাউনলোড করতে পারবেন।")
+
+
 # ===== Flask App Setup =====
 app = Flask(__name__)
+# সেশন সিক্রেট কী - এটি খুব গুরুত্বপূর্ণ! একটি র্যান্ডম এবং শক্তিশালী কী দিন।
+# প্রোডাকশনে এটি এনভায়রনমেন্ট ভেরিয়েবল থেকে আসা উচিত।
+app.secret_key = os.urandom(24) # একটি র্যান্ডম সিক্রেট কী তৈরি করবে
 
 # ===== Flask Routes =====
 @app.route("/")
 def home():
     movies = list(collection.find())
-    # এখানে সিনেমার slug ডেটাবেস থেকে সরাসরি ব্যবহার করা হচ্ছে,
-    # তাই নতুন করে slug তৈরির দরকার নেই।
     return render_template_string(INDEX_HTML, movies=movies)
 
 @app.route("/movie/<slug>")
 def movie_detail(slug):
-    # স্ল্যাগ দিয়ে সরাসরি ডেটাবেসে অনুসন্ধান করুন
     movie = collection.find_one({"slug": slug})
     
     if not movie:
@@ -496,25 +582,38 @@ def watch(file_id):
 def download(file_id):
     return redirect(f"https://t.me/{BOT_USERNAME}?start=download_{file_id}")
 
-@app.route("/admin")
-def admin():
-    token = request.args.get("token")
-    if token != ADMIN_TOKEN:
-        return abort(403)
-    movies = list(collection.find())
-    return render_template_string(ADMIN_HTML, movies=movies, token=token)
+# অ্যাডমিন লগইন এবং প্যানেল রুট
+@app.route("/admin", methods=["GET"])
+def admin_panel_or_login():
+    if 'logged_in' in session and session['logged_in']:
+        movies = list(collection.find())
+        return render_template_string(ADMIN_HTML, movies=movies)
+    return render_template_string(LOGIN_HTML)
+
+@app.route("/admin/login", methods=["POST"])
+def admin_login():
+    password = request.form.get("password")
+    if password == ADMIN_PASSWORD:
+        session['logged_in'] = True
+        return redirect(url_for('admin_panel_or_login')) # লগইন সফল হলে অ্যাডমিন প্যানেলে রিডাইরেক্ট
+    return render_template_string(LOGIN_HTML, error="Invalid Password")
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop('logged_in', None) # সেশন থেকে লগইন তথ্য মুছে ফেলা
+    return redirect(url_for('admin_panel_or_login')) # লগইন পেজে রিডাইরেক্ট
 
 @app.route("/admin/delete/<mid>")
 def delete(mid):
-    token = request.args.get("token")
-    if token != ADMIN_TOKEN:
-        return abort(403)
+    if 'logged_in' not in session or not session['logged_in']:
+        return abort(403) # লগইন না থাকলে অ্যাক্সেস Deny
     try:
-        collection.delete_one({"_id": pymongo.ObjectId(mid)})
+        from bson.objectid import ObjectId # ObjectId ইম্পোর্ট করুন
+        collection.delete_one({"_id": ObjectId(mid)})
     except Exception as e:
         print(f"Error deleting movie {mid}: {e}") # ডিবাগিং
         return "Error deleting movie", 500
-    return redirect(f"/admin?token={token}")
+    return redirect(url_for('admin_panel_or_login')) # সফলভাবে ডিলিট হলে অ্যাডমিন প্যানেলে রিডাইরেক্ট
 
 # ===== RUN BOTH =====
 def run_flask_app():
@@ -524,7 +623,6 @@ def run_flask_app():
     app.run(host="0.0.0.0", port=5000, debug=False)
 
 if __name__ == "__main__":
-    # Flask অ্যাপ একটি আলাদা থ্রেডে চালান যাতে বটও সাথে চলতে পারে
     flask_thread = threading.Thread(target=run_flask_app)
     flask_thread.start()
     
