@@ -7,12 +7,12 @@ from flask import Flask, render_template_string, abort
 from slugify import slugify
 
 # ===== CONFIGURATION =====
-MONGO_URI = "your_mongodb_connection_string"
+MONGO_URI = "mongodb+srv://manogog673:manogog673@cluster0.ot1qt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 TMDB_API_KEY = "your_tmdb_api_key"
-CHANNEL_USERNAME = "YourChannelUsername"  # public channel username without @
-API_ID = 123456  # your Telegram api_id
-API_HASH = "your_api_hash"
-BOT_TOKEN = "your_bot_token"
+CHANNEL_USERNAME = "autoposht"  # public channel username without @
+API_ID = 22697010  # your Telegram api_id
+API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
+BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
 
 # ===== MongoDB Setup =====
 mongo = pymongo.MongoClient(MONGO_URI)
