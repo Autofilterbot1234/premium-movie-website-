@@ -14,7 +14,7 @@ from datetime import datetime
 MONGO_URI = "mongodb+srv://manogog673:manogog673@cluster0.ot1qt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 TMDB_API_KEY = "7dc544d9253bccc3cfecc1c677f69819"
 CHANNEL_USERNAME = "autoposht" # আপনার চ্যানেলের সঠিক ইউজারনেম দিন, যেমন @your_channel
-BOT_USERNAME = "CtgAutoPostBot" # আপনার বটের সঠিক ইউজারনেম দিন, যেমন @your_bot
+BOT_USERNAME = "CtgAutoPostBot" # <<<<<<< এখানে আপনার বটের সঠিক ইউজারনেম দিন, যেমন @your_bot হলে শুধু "your_bot" লিখুন >>>>>>>
 API_ID = 22697010
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
@@ -463,7 +463,7 @@ def extract_info(text):
 def get_tmdb_info(title, year):
     # TMDB সার্চের জন্য সঠিক বছর ব্যবহার করুন, যদি না থাকে তবে শুধু টাইটেল দিয়ে সার্চ করুন
     search_url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={title}"
-    if year and year != "0000": # '0000' যদি ডিফল্ট হিসেবে আসে সেটা এড়িয়ে যান
+    if year and year != "0000" and year != "Unknown": # '0000' বা 'Unknown' ডিফল্ট হিসেবে আসে সেটা এড়িয়ে যান
         search_url += f"&year={year}"
     
     print(f"Fetching TMDB info for: {title} ({year if year else 'No Year'}) from URL: {search_url}")
@@ -481,15 +481,9 @@ def get_tmdb_info(title, year):
             
             # নিশ্চিত করুন যে বছর সঠিক
             found_year = str(m.get('release_date', '')[:4])
-            if not year and found_year: # যদি ক্যাপশনে বছর না থাকে, কিন্তু TMDB তে পাওয়া যায়
+            # যদি ক্যাপশনে বছর না থাকে, কিন্তু TMDB তে পাওয়া যায়, অথবা TMDB এর বছরটি সঠিক মনে হয়
+            if found_year and (not year or year == "Unknown" or year != found_year):
                 year = found_year
-            elif year and found_year and year != found_year: # যদি ক্যাপশনের বছর TMDB এর সাথে না মেলে
-                print(f"Warning: Year mismatch for '{title}'. Caption year: {year}, TMDB year: {found_year}")
-                # আপনি চাইলে এখানে TMDB এর বছরটিকে গ্রহণ করতে পারেন, অথবা ক্যাপশনের বছরটিই রাখতে পারেন
-                # আপাতত, ক্যাপশনের বছরই অগ্রাধিকার পাচ্ছে, তবে এটি একটি চিন্তার বিষয়।
-                # এই উদাহরনে আমরা TMDB এর বছরটিকেই ব্যবহার করছি যদি এটি আরও নির্ভরযোগ্য হয়।
-                year = found_year
-
 
             print(f"TMDB Success: Title='{m.get('title')}', Year='{year}', Poster URL='{poster_url}', Overview='{overview[:50]}...'")
             return {
@@ -520,10 +514,8 @@ async def save_movie(client, message):
         print(f"Could not extract info (title/quality) from caption: '{message.caption}', skipping.")
         return
     
-    # যদি বছর None আসে, '0000' হিসেবে সেট করুন বা একটি খালি স্ট্রিং
-    # TMDB ফাংশন এটি ম্যানেজ করবে
     if year is None:
-        year = "Unknown" # বা আপনি একটি ডিফল্ট বছর সেট করতে পারেন
+        year = "Unknown" 
 
     file_id = None
     if message.video:
@@ -537,11 +529,8 @@ async def save_movie(client, message):
         print("No video or document file_id found, skipping.")
         return
 
-    # TMDB থেকে বিস্তারিত তথ্য আনুন
     tmdb_data = get_tmdb_info(title, year)
     
-    # নিশ্চিত করুন যে tmdb_data একটি ডিকশনারি এবং তাতে প্রয়োজনীয় কী আছে
-    # যদি TMDB থেকে title/year পরিবর্তন হয়ে আসে, তাহলে সেটাই ব্যবহার করুন
     actual_title = tmdb_data.get("title", title)
     actual_year = tmdb_data.get("year", year)
     poster_url = tmdb_data.get("poster_url", "")
@@ -569,15 +558,14 @@ async def save_movie(client, message):
             existing["qualities"].append(quality_entry)
             print(f"Added new quality {quality} to existing movie.")
         
-        # নিশ্চিত করুন যে সকল TMDB ডেটা আপডেট হচ্ছে
         collection.update_one(
             {"_id": existing["_id"]},
             {"$set": {
-                "title": actual_title, # TMDB থেকে আসা আপডেটেড টাইটেল
-                "year": actual_year,   # TMDB থেকে আসা আপডেটেড বছর
+                "title": actual_title,
+                "year": actual_year,
                 "overview": overview,
                 "poster_url": poster_url,
-                "qualities": existing["qualities"], # কোয়ালিটি লিস্ট আপডেট সহ
+                "qualities": existing["qualities"],
                 "slug": movie_slug,
                 "last_updated": current_time 
             }}
@@ -588,7 +576,7 @@ async def save_movie(client, message):
         collection.insert_one({
             "title": actual_title,
             "year": actual_year,
-            "language": "Unknown", # আপনার প্রয়োজন অনুযায়ী সেট করুন
+            "language": "Unknown",
             "overview": overview,
             "poster_url": poster_url,
             "qualities": [quality_entry],
@@ -665,12 +653,14 @@ def movie_detail(slug):
 
 @app.route("/watch/<file_id>")
 def watch(file_id):
+    # নিশ্চিত করুন BOT_USERNAME সঠিকভাবে সেট করা আছে
     redirect_url = f"https://t.me/{BOT_USERNAME}?start=stream_{file_id}"
     print(f"Redirecting to watch URL: {redirect_url}")
     return redirect(redirect_url)
 
 @app.route("/download/<file_id>")
 def download(file_id):
+    # নিশ্চিত করুন BOT_USERNAME সঠিকভাবে সেট করা আছে
     redirect_url = f"https://t.me/{BOT_USERNAME}?start=download_{file_id}"
     print(f"Redirecting to download URL: {redirect_url}")
     return redirect(redirect_url)
@@ -727,3 +717,4 @@ if __name__ == "__main__":
     
     print("Starting Telegram Bot...")
     bot.run()
+
