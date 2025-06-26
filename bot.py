@@ -18,7 +18,7 @@ BOT_USERNAME = "CtgAutoPostBot" # <<<<<<< এখানে আপনার বট
 API_ID = 22697010
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
-ADMIN_PASSWORD = "your_strong_admin_password_here" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
+ADMIN_PASSWORD = "Nahid270" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
 
 # ===== MongoDB Setup =====
 mongo = pymongo.MongoClient(MONGO_URI)
