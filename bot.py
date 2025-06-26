@@ -18,7 +18,7 @@ BOT_USERNAME = "CtgAutoPostBot" # <<<<<<< এখানে আপনার বট
 API_ID = 22697010
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
-ADMIN_PASSWORD = "Nahid270" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
+ADMIN_PASSWORD = "your_strong_admin_password_here" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
 
 # ===== MongoDB Setup =====
 mongo = pymongo.MongoClient(MONGO_URI)
@@ -28,7 +28,7 @@ collection = db["movies"]
 # ===== Pyrogram Bot Setup =====
 bot = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# ===== Template HTMLs (আগের মতোই আছে, পরিবর্তন করা হয়নি) =====
+# ===== Template HTMLs (আগের মতোই আছে) =====
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
@@ -447,13 +447,11 @@ LOGIN_HTML = """
 
 # ===== Utility Functions =====
 def extract_info(text):
-    # Updated regex to be more robust for year extraction
-    # It tries to find a 4-digit number (year) optionally, and then 3/4p
     pattern = r"(.+?)(?:\s*\(?(\d{4})\)?)?\s*(?:\||-|–|\s+)?(\d{3,4}p)"
     match = re.search(pattern, text, re.IGNORECASE)
     if match:
         title = match.group(1).strip()
-        year = match.group(2) # সাল পাওয়া গেলে সেটি, না পেলে None
+        year = match.group(2)
         quality = match.group(3)
         print(f"Extracted: Title='{title}', Year='{year}', Quality='{quality}'")
         return title, year, quality
@@ -461,9 +459,8 @@ def extract_info(text):
     return None, None, None
 
 def get_tmdb_info(title, year):
-    # TMDB সার্চের জন্য সঠিক বছর ব্যবহার করুন, যদি না থাকে তবে শুধু টাইটেল দিয়ে সার্চ করুন
     search_url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={title}"
-    if year and year != "0000" and year != "Unknown": # '0000' বা 'Unknown' ডিফল্ট হিসেবে আসে সেটা এড়িয়ে যান
+    if year and year != "0000" and year != "Unknown":
         search_url += f"&year={year}"
     
     print(f"Fetching TMDB info for: {title} ({year if year else 'No Year'}) from URL: {search_url}")
@@ -473,21 +470,18 @@ def get_tmdb_info(title, year):
         print(f"TMDB API Response: {res}")
 
         if res.get("results"):
-            # প্রথম সেরা ফলাফলটি নিন
             m = res["results"][0]
             poster_path = m.get('poster_path')
             poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
-            overview = m.get("overview", "No overview available.") # ডিফল্ট টেক্সট যোগ করা হয়েছে
+            overview = m.get("overview", "No overview available.")
             
-            # নিশ্চিত করুন যে বছর সঠিক
             found_year = str(m.get('release_date', '')[:4])
-            # যদি ক্যাপশনে বছর না থাকে, কিন্তু TMDB তে পাওয়া যায়, অথবা TMDB এর বছরটি সঠিক মনে হয়
             if found_year and (not year or year == "Unknown" or year != found_year):
                 year = found_year
 
             print(f"TMDB Success: Title='{m.get('title')}', Year='{year}', Poster URL='{poster_url}', Overview='{overview[:50]}...'")
             return {
-                "title": m.get('title', title), # TMDB টাইটেল ব্যবহার করুন যদি পাওয়া যায়
+                "title": m.get('title', title),
                 "year": year,
                 "poster_url": poster_url,
                 "overview": overview
@@ -497,7 +491,6 @@ def get_tmdb_info(title, year):
     except Exception as e:
         print(f"Error fetching TMDB info for {title} ({year if year else 'No Year'}): {e}")
     
-    # যদি TMDB থেকে কোনো তথ্য না আসে, তবে ডিফল্ট খালি তথ্য ফেরত দিন
     return {"title": title, "year": year if year else "Unknown", "poster_url": "", "overview": "No overview available from TMDB."}
 
 
@@ -515,7 +508,7 @@ async def save_movie(client, message):
         return
     
     if year is None:
-        year = "Unknown" 
+        year = "Unknown"
 
     file_id = None
     if message.video:
@@ -590,42 +583,48 @@ async def save_movie(client, message):
 @bot.on_message(filters.private & filters.command("start"))
 async def start_command_handler(client, message):
     print(f"Received /start command from {message.from_user.id}")
+    
+    # Debugging: Check the full message text and command list
+    print(f"Full message text: {message.text}")
+    print(f"Message command list: {message.command}")
+
     if len(message.command) > 1:
+        # message.command[1] should contain the argument after /start (e.g., "stream_FILE_ID")
         action_param = message.command[1] 
-        print(f"Start command parameter: {action_param}")
+        print(f"Detected start command parameter: {action_param}")
         
         if action_param.startswith("stream_"):
             file_id = action_param.replace("stream_", "", 1)
-            print(f"Action: Stream, File ID: {file_id}")
+            print(f"Action: Stream, Extracted File ID: {file_id}")
             try:
                 await client.send_document(
                     chat_id=message.chat.id,
                     file_id=file_id,
                     caption="আপনার অনুরোধ করা ফাইলটি এখানে! 🍿\n\nযদি এটি ভিডিও হয়, তাহলে আপনি এটি স্ট্রিম করতে পারবেন।"
                 )
-                print(f"Sent stream file {file_id} to {message.chat.id}")
+                print(f"Successfully sent stream file {file_id} to {message.chat.id}")
             except Exception as e:
                 await message.reply_text(f"দুঃখিত, ফাইলটি স্ট্রিম করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন। এরর: {e}")
                 print(f"Error sending stream file {file_id}: {e}")
 
         elif action_param.startswith("download_"):
             file_id = action_param.replace("download_", "", 1)
-            print(f"Action: Download, File ID: {file_id}")
+            print(f"Action: Download, Extracted File ID: {file_id}")
             try:
                 await client.send_document(
                     chat_id=message.chat.id,
                     file_id=file_id,
                     caption="আপনার অনুরোধ করা ফাইলটি এখানে! 📥\n\nআপনি এটি ডাউনলোড করতে পারবেন।"
                 )
-                print(f"Sent download file {file_id} to {message.chat.id}")
+                print(f"Successfully sent download file {file_id} to {message.chat.id}")
             except Exception as e:
                 await message.reply_text(f"দুঃখিত, ফাইলটি ডাউনলোড করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন। এরর: {e}")
                 print(f"Error sending download file {file_id}: {e}")
         else:
-            print(f"Unknown start command parameter: {action_param}")
+            print(f"Unknown start command parameter format: {action_param}")
             await message.reply_text("স্বাগতম! আপনি এখানে আপনার পছন্দের মুভি দেখতে বা ডাউনলোড করতে পারবেন।")
     else:
-        print("Received /start command without parameter.")
+        print("Received /start command without any parameter.")
         await message.reply_text("স্বাগতম! আপনি এখানে আপনার পছন্দের মুভি দেখতে বা ডাউনলোড করতে পারবেন।")
 
 
@@ -653,14 +652,12 @@ def movie_detail(slug):
 
 @app.route("/watch/<file_id>")
 def watch(file_id):
-    # নিশ্চিত করুন BOT_USERNAME সঠিকভাবে সেট করা আছে
     redirect_url = f"https://t.me/{BOT_USERNAME}?start=stream_{file_id}"
     print(f"Redirecting to watch URL: {redirect_url}")
     return redirect(redirect_url)
 
 @app.route("/download/<file_id>")
 def download(file_id):
-    # নিশ্চিত করুন BOT_USERNAME সঠিকভাবে সেট করা আছে
     redirect_url = f"https://t.me/{BOT_USERNAME}?start=download_{file_id}"
     print(f"Redirecting to download URL: {redirect_url}")
     return redirect(redirect_url)
@@ -717,4 +714,3 @@ if __name__ == "__main__":
     
     print("Starting Telegram Bot...")
     bot.run()
-
