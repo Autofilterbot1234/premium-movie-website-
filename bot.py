@@ -24,8 +24,8 @@ collection = db["movies"]
 bot = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 def extract_info(text):
-    pattern = r"(.*?)(?:\s*\(?(٠-٩\d{4})\)?)*\s*\|\s*(\d{3,4}p)"
-    match = re.search(pattern, text)
+    pattern = r"(.*?)(?:\s*(\d{4}))?\s*(?:\||-|–)?\s*(\d{3,4}p)"
+    match = re.search(pattern, text, re.IGNORECASE)
     if match:
         title = match.group(1).strip()
         year = match.group(2) or "0000"
@@ -47,13 +47,14 @@ def get_tmdb_info(title, year):
         pass
     return {"poster_url": "", "overview": ""}
 
-@bot.on_message(filters.channel & filters.video)
+@bot.on_message(filters.channel & (filters.video | filters.document))
 async def save_movie(client, message):
     if not message.caption:
         return
 
     title, year, quality = extract_info(message.caption)
     if not title or not quality:
+        print("[✘] Title or quality not matched in caption")
         return
 
     link = f"https://t.me/{CHANNEL_USERNAME}/{message.id}"
@@ -81,6 +82,7 @@ async def save_movie(client, message):
             "poster_url": tmdb_info["poster_url"],
             "qualities": [quality_entry]
         })
+    print(f"[✔] Saved: {title} ({year}) - {quality}")
 
 # ===== Flask Setup =====
 app = Flask(__name__)
