@@ -28,58 +28,369 @@ bot = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 # ===== Template HTMLs =====
 INDEX_HTML = """
 <!DOCTYPE html>
-<html><head><title>MovieZone - All Movies</title>
-<style>
-body { font-family: sans-serif; background: #f0f0f0; max-width: 900px; margin: auto; padding: 20px; }
-.movies-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap: 15px; }
-.movie-card { text-decoration: none; color: #000; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; }
-.movie-card:hover { transform: scale(1.03); }
-.movie-card img { width: 100%; height: auto; }
-.movie-title { padding: 10px; text-align: center; font-weight: bold; }
-</style></head>
-<body><h1>MovieZone - All Movies</h1>
-<div class="movies-grid">
-{% for movie in movies %}
-<a class="movie-card" href="/movie/{{ movie.slug }}">
-<img src="{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}">
-<div class="movie-title">{{ movie.title }} ({{ movie.year }})</div>
-</a>
-{% endfor %}
-</div></body></html>
+<html>
+<head>
+    <title>MovieZone - All Movies</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #e9ecef;
+            max-width: 1000px; /* ম্যাক্সিমাম উইডথ বাড়ানো হয়েছে */
+            margin: auto;
+            padding: 20px;
+            color: #343a40;
+            line-height: 1.6;
+        }
+        h1 {
+            text-align: center;
+            color: #007bff;
+            margin-bottom: 30px;
+            font-size: 2.5em; /* ফন্ট সাইজ বাড়ানো হয়েছে */
+            font-weight: 700;
+        }
+        .movies-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); /* মোবাইল: প্রতি সারিতে ২টা কার্ড (কমপক্ষে 160px) */
+            gap: 20px; /* গ্যাপ বাড়ানো হয়েছে */
+            padding: 0 10px; /* গ্রিডের চারপাশে প্যাডিং */
+        }
+        .movie-card {
+            text-decoration: none;
+            color: #343a40;
+            background: white;
+            border-radius: 12px; /* বর্ডার রেডিয়াস বাড়ানো হয়েছে */
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1); /* শ্যাডো আরও গভীর করা হয়েছে */
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center; /* কন্টেন্ট সেন্টারে আনতে */
+            padding-bottom: 10px; /* টাইটেলের নিচে প্যাডিং */
+        }
+        .movie-card:hover {
+            transform: translateY(-8px); /* হোভারে আরও উপরে উঠবে */
+            box-shadow: 0 12px 25px rgba(0,0,0,0.2);
+        }
+        .movie-card img {
+            width: 100%;
+            height: 240px; /* ফিক্সড হাইট, মোবাইল অনুসারে */
+            object-fit: cover;
+            display: block;
+            border-bottom: 1px solid #eee;
+        }
+        .movie-title {
+            padding: 10px 8px; /* প্যাডিং সামঞ্জস্য করা হয়েছে */
+            text-align: center;
+            font-weight: 600; /* ফন্ট ওয়েট বাড়ানো হয়েছে */
+            font-size: 0.95em; /* ফন্ট সাইজ সামঞ্জস্য করা হয়েছে */
+            color: #495057;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px; /* টাইটেল বক্সের মিনিমাম হাইট */
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 599px) { /* 600px এর নিচে স্ক্রিনের জন্য (মোবাইল) */
+            .movies-grid {
+                grid-template-columns: repeat(2, 1fr); /* মোবাইলে প্রতি সারিতে ২টা কার্ড */
+                gap: 15px;
+            }
+            .movie-card img {
+                height: 200px; /* মোবাইলে ইমেজের হাইট */
+            }
+            .movie-title {
+                font-size: 0.9em;
+            }
+            h1 {
+                font-size: 2em;
+            }
+            body {
+                padding: 15px;
+            }
+        }
+
+        @media (min-width: 600px) and (max-width: 991px) { /* ট্যাবলেট সাইজের জন্য */
+            .movies-grid {
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); /* প্রতি সারিতে ৩-৪টা কার্ড */
+            }
+            .movie-card img {
+                height: 270px;
+            }
+        }
+
+        @media (min-width: 992px) { /* ডেস্কটপ স্ক্রিনের জন্য */
+            .movies-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* প্রতি সারিতে ৪-৫টা কার্ড */
+            }
+            .movie-card img {
+                height: 300px;
+            }
+            .movie-title {
+                font-size: 1em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>MovieZone - All Movies</h1>
+    <div class="movies-grid">
+        {% for movie in movies %}
+        <a class="movie-card" href="/movie/{{ movie.slug }}">
+            <img src="{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}" alt="{{ movie.title }} Poster">
+            <div class="movie-title">{{ movie.title }} ({{ movie.year }})</div>
+        </a>
+        {% endfor %}
+    </div>
+</body>
+</html>
 """
 
 MOVIE_HTML = """
 <!DOCTYPE html>
-<html><head><title>{{ movie.title }}</title>
-<style>
-body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; background: #fff; }
-img { max-width: 300px; float: left; margin-right: 20px; border-radius: 8px; }
-h1 { margin-top: 0; }
-.btn { display: inline-block; margin: 5px 10px; padding: 10px 20px; background: #007BFF; color: white; border-radius: 5px; text-decoration: none; }
-.btn:hover { background: #0056b3; }
-.clear { clear: both; }
-</style></head>
-<body><h1>{{ movie.title }} ({{ movie.year }})</h1>
-<img src="{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}">
-<p>{{ movie.overview }}</p>
-<div class="clear"></div>
-{% for q in movie.qualities %}
-<p><b>{{ q.quality }}</b>:
-<a class="btn" href="/watch/{{ q.file_id }}">▶️ Watch</a>
-<a class="btn" href="/download/{{ q.file_id }}">⬇️ Download</a></p>
-{% endfor %}
-<p><a href="/">← Back</a></p></body></html>
+<html>
+<head>
+    <title>{{ movie.title }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+            background: #ffffff;
+            color: #343a40;
+            line-height: 1.6;
+            box-shadow: 0 0 15px rgba(0,0,0,0.05); /* বডির চারপাশে হালকা শ্যাডো */
+            border-radius: 8px;
+        }
+        h1 {
+            margin-top: 0;
+            color: #007bff;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 2.2em;
+            font-weight: 700;
+        }
+        .movie-content {
+            display: flex;
+            flex-direction: column; /* মোবাইলের জন্য কলাম লেআউট */
+            align-items: center;
+            margin-bottom: 25px;
+            text-align: center; /* ওভারভিউ টেক্সট সেন্টারে আনতে */
+        }
+        .movie-content img {
+            max-width: 280px; /* মোবাইলের জন্য ইমেজের সাইজ */
+            height: auto;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+            display: block;
+            border: 1px solid #e0e0e0;
+        }
+        .movie-content p {
+            text-align: justify; /* ওভারভিউ টেক্সট জাস্টিফাই করা হয়েছে */
+            margin: 0;
+            padding: 0 10px; /* সাইড প্যাডিং */
+            font-size: 1.05em;
+        }
+        .quality-section {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .quality-section b {
+            display: block;
+            margin-bottom: 12px;
+            color: #007bff;
+            font-size: 1.2em;
+            font-weight: 600;
+            text-align: center; /* কোয়ালিটি টেক্সট সেন্টারে */
+        }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px; /* বাটনগুলির মধ্যে গ্যাপ */
+            justify-content: center; /* বাটনগুলোকে সেন্টারে আনতে */
+            margin-top: 15px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 25px;
+            background: #007bff;
+            color: white;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+            white-space: nowrap;
+            box-shadow: 0 4px 10px rgba(0,123,255,0.2);
+        }
+        .btn:hover {
+            background: #0056b3;
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0,123,255,0.3);
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 35px;
+            font-size: 1.15em;
+            color: #6c757d;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        .back-link:hover {
+            color: #007bff;
+            text-decoration: underline;
+        }
+        
+        /* Responsive adjustments */
+        @media (min-width: 600px) { /* 600px এর উপরে স্ক্রিনের জন্য (ডেস্কটপ/ট্যাবলেট) */
+            h1 {
+                text-align: left;
+            }
+            .movie-content {
+                flex-direction: row;
+                align-items: flex-start;
+                text-align: left;
+            }
+            .movie-content img {
+                max-width: 300px;
+                margin-right: 30px;
+                margin-bottom: 0;
+            }
+            .movie-content p {
+                padding: 0;
+            }
+            .quality-section b {
+                text-align: left;
+            }
+            .btn-group {
+                justify-content: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ movie.title }} ({{ movie.year }})</h1>
+    <div class="movie-content">
+        <img src="{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}" alt="{{ movie.title }} Poster">
+        <p>{{ movie.overview }}</p>
+    </div>
+    
+    {% for q in movie.qualities %}
+    <div class="quality-section">
+        <b>{{ q.quality }}</b>
+        <div class="btn-group">
+            <a class="btn" href="/watch/{{ q.file_id }}">▶️ Watch</a>
+            <a class="btn" href="/download/{{ q.file_id }}">⬇️ Download</a>
+        </div>
+    </div>
+    {% endfor %}
+    <a href="/" class="back-link">← Back to All Movies</a>
+</body>
+</html>
 """
 
 ADMIN_HTML = """
-<html><head><title>Admin Panel</title></head><body>
-<h1>Admin Panel</h1>
-<ul>
-{% for movie in movies %}
-<li>{{ movie.title }} ({{ movie.year }}) <a href='/admin/delete/{{ movie._id }}?token={{ token }}'>❌ Delete</a></li>
-{% endfor %}
-</ul>
-</body></html>
+<html>
+<head>
+    <title>Admin Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #343a40;
+        }
+        h1 {
+            text-align: center;
+            color: #dc3545; /* লাল রং অ্যাডমিনের জন্য */
+            margin-bottom: 30px;
+            font-size: 2.2em;
+            font-weight: 700;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            padding: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            font-size: 1.05em;
+        }
+        li span {
+            flex-grow: 1;
+            margin-right: 15px; /* টেক্সট এবং বাটনের মধ্যে গ্যাপ */
+            font-weight: 500;
+        }
+        li a {
+            color: #dc3545;
+            text-decoration: none;
+            font-weight: bold;
+            padding: 8px 15px;
+            border: 2px solid #dc3545; /* বর্ডার মোটা করা হয়েছে */
+            border-radius: 5px;
+            transition: background 0.2s, color 0.2s, transform 0.2s;
+            white-space: nowrap;
+        }
+        li a:hover {
+            background: #dc3545;
+            color: white;
+            transform: translateY(-2px);
+        }
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            body {
+                padding: 15px;
+            }
+            li {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 15px;
+            }
+            li span {
+                margin-right: 0;
+                margin-bottom: 10px; /* নিচে মার্জিন যোগ করা হয়েছে */
+                font-size: 0.95em;
+            }
+            li a {
+                align-self: stretch; /* বাটন পুরো প্রস্থে ছড়িয়ে যাবে */
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Admin Panel</h1>
+    <ul>
+        {% for movie in movies %}
+        <li>
+            <span>{{ movie.title }} ({{ movie.year }})</span>
+            <a href='/admin/delete/{{ movie._id }}?token={{ token }}'>❌ Delete</a>
+        </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
 """
 
 # ===== Utility Functions =====
@@ -119,7 +430,6 @@ async def save_movie(client, message):
     tmdb_info = get_tmdb_info(title, year)
 
     # সিনেমার জন্য একটি ইউনিক স্ল্যাগ তৈরি করুন
-    # এখানে বছরের সাথে শিরোনাম যোগ করে স্ল্যাগ তৈরি করা হচ্ছে
     movie_slug = f"{slugify(title)}-{year}"
 
     # ডেটাবেসে একই টাইটেল এবং সাল এর মুভি আছে কিনা চেক করুন
@@ -140,7 +450,6 @@ async def save_movie(client, message):
             existing["qualities"].append(quality_entry)
         
         # নিশ্চিত করুন যে slug field আছে এবং আপডেটেড (যদি title বা year পরিবর্তন হয়)
-        # সাধারণত, একবার যোগ হলে slug পরিবর্তন হয় না, তবুও নিশ্চিত করা ভালো
         existing["slug"] = movie_slug
         collection.update_one({"_id": existing["_id"]}, {"$set": existing})
         print(f"Updated existing movie: {title} ({year})") # ডিবাগিং
