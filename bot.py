@@ -5,12 +5,13 @@ import re
 import requests
 from flask import Flask, render_template_string, abort
 from slugify import slugify
+import asyncio  # asyncio ইম্পোর্ট করুন
 
 # ===== CONFIGURATION =====
 MONGO_URI = "mongodb+srv://manogog673:manogog673@cluster0.ot1qt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-TMDB_API_KEY = "your_tmdb_api_key"
-CHANNEL_USERNAME = "autoposht"  # public channel username without @
-API_ID = 22697010  # your Telegram api_id
+TMDB_API_KEY = "7dc544d9253bccc3cfecc1c677f69819"
+CHANNEL_USERNAME = "autoposht"  # চ্যানেল ইউজারনেম, @ ছাড়া
+API_ID = 22697010  # Telegram API ID
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
 
@@ -181,6 +182,8 @@ def movie_detail(slug):
 # ===== Run Bot and Flask app concurrently =====
 
 def run_bot():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     bot.run()
 
 def run_flask():
