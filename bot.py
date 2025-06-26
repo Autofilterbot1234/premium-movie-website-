@@ -5,9 +5,10 @@ import pymongo
 import re
 import requests
 from flask import Flask, request, redirect, abort, render_template_string, session, url_for
-from slugify import slugify # নিশ্চিত করুন এটি ইনস্টল করা আছে: pip install python-slugify
+from slugify import slugify
 import os
-from bson.objectid import ObjectId # ObjectId ইম্পোর্ট করুন
+from bson.objectid import ObjectId
+from datetime import datetime
 
 # ===== CONFIGURATION =====
 MONGO_URI = "mongodb+srv://manogog673:manogog673@cluster0.ot1qt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -446,114 +447,168 @@ LOGIN_HTML = """
 
 # ===== Utility Functions =====
 def extract_info(text):
-    pattern = r"(.*?)(?:\s*(\d{4}))?\s*(?:\||-|–)?\s*(\d{3,4}p)"
+    # Updated regex to be more robust for year extraction
+    # It tries to find a 4-digit number (year) optionally, and then 3/4p
+    pattern = r"(.+?)(?:\s*\(?(\d{4})\)?)?\s*(?:\||-|–|\s+)?(\d{3,4}p)"
     match = re.search(pattern, text, re.IGNORECASE)
     if match:
         title = match.group(1).strip()
-        year = match.group(2) or "0000" # যদি সাল না থাকে, ডিফল্ট "0000"
+        year = match.group(2) # সাল পাওয়া গেলে সেটি, না পেলে None
         quality = match.group(3)
-        print(f"Extracted: Title='{title}', Year='{year}', Quality='{quality}'") # ডিবাগিং
+        print(f"Extracted: Title='{title}', Year='{year}', Quality='{quality}'")
         return title, year, quality
-    print(f"Failed to extract info from caption: {text}") # ডিবাগিং
+    print(f"Failed to extract info from caption: '{text}' (No title, year, or quality pattern matched)")
     return None, None, None
 
 def get_tmdb_info(title, year):
+    # TMDB সার্চের জন্য সঠিক বছর ব্যবহার করুন, যদি না থাকে তবে শুধু টাইটেল দিয়ে সার্চ করুন
+    search_url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={title}"
+    if year and year != "0000": # '0000' যদি ডিফল্ট হিসেবে আসে সেটা এড়িয়ে যান
+        search_url += f"&year={year}"
+    
+    print(f"Fetching TMDB info for: {title} ({year if year else 'No Year'}) from URL: {search_url}")
+
     try:
-        url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={title}&year={year}"
-        print(f"Fetching TMDB info for: {title} ({year}) from URL: {url}") # ডিবাগিং
-        res = requests.get(url).json()
-        print(f"TMDB API Response: {res}") # ডিবাগিং: TMDB থেকে কী রেসপন্স আসছে তা দেখুন
+        res = requests.get(search_url).json()
+        print(f"TMDB API Response: {res}")
 
         if res.get("results"):
+            # প্রথম সেরা ফলাফলটি নিন
             m = res["results"][0]
             poster_path = m.get('poster_path')
             poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
-            overview = m.get("overview", "")
-            print(f"TMDB Success: Poster URL='{poster_url}', Overview='{overview}'") # ডিবাগিং
+            overview = m.get("overview", "No overview available.") # ডিফল্ট টেক্সট যোগ করা হয়েছে
+            
+            # নিশ্চিত করুন যে বছর সঠিক
+            found_year = str(m.get('release_date', '')[:4])
+            if not year and found_year: # যদি ক্যাপশনে বছর না থাকে, কিন্তু TMDB তে পাওয়া যায়
+                year = found_year
+            elif year and found_year and year != found_year: # যদি ক্যাপশনের বছর TMDB এর সাথে না মেলে
+                print(f"Warning: Year mismatch for '{title}'. Caption year: {year}, TMDB year: {found_year}")
+                # আপনি চাইলে এখানে TMDB এর বছরটিকে গ্রহণ করতে পারেন, অথবা ক্যাপশনের বছরটিই রাখতে পারেন
+                # আপাতত, ক্যাপশনের বছরই অগ্রাধিকার পাচ্ছে, তবে এটি একটি চিন্তার বিষয়।
+                # এই উদাহরনে আমরা TMDB এর বছরটিকেই ব্যবহার করছি যদি এটি আরও নির্ভরযোগ্য হয়।
+                year = found_year
+
+
+            print(f"TMDB Success: Title='{m.get('title')}', Year='{year}', Poster URL='{poster_url}', Overview='{overview[:50]}...'")
             return {
+                "title": m.get('title', title), # TMDB টাইটেল ব্যবহার করুন যদি পাওয়া যায়
+                "year": year,
                 "poster_url": poster_url,
                 "overview": overview
             }
         else:
-            print(f"TMDB No results found for: {title} ({year})") # ডিবাগিং
+            print(f"TMDB No results found for: {title} ({year if year else 'No Year'})")
     except Exception as e:
-        print(f"Error fetching TMDB info for {title} ({year}): {e}") # ডিবাগিং এর জন্য এরর প্রিন্ট করা হলো
-    return {"poster_url": "", "overview": ""}
+        print(f"Error fetching TMDB info for {title} ({year if year else 'No Year'}): {e}")
+    
+    # যদি TMDB থেকে কোনো তথ্য না আসে, তবে ডিফল্ট খালি তথ্য ফেরত দিন
+    return {"title": title, "year": year if year else "Unknown", "poster_url": "", "overview": "No overview available from TMDB."}
+
 
 # ===== Pyrogram Bot Handler for Channel Posts =====
 @bot.on_message(filters.channel & (filters.video | filters.document))
 async def save_movie(client, message):
-    print(f"Received message in channel: {message.chat.id}") # ডিবাগিং
+    print(f"Received message in channel: {message.chat.id}")
     if not message.caption:
-        print("Message has no caption, skipping.") # ডিবাগিং
+        print("Message has no caption, skipping.")
         return
 
     title, year, quality = extract_info(message.caption)
     if not title or not quality:
-        print(f"Could not extract info from caption: '{message.caption}', skipping.") # ডিবাগিং
+        print(f"Could not extract info (title/quality) from caption: '{message.caption}', skipping.")
         return
+    
+    # যদি বছর None আসে, '0000' হিসেবে সেট করুন বা একটি খালি স্ট্রিং
+    # TMDB ফাংশন এটি ম্যানেজ করবে
+    if year is None:
+        year = "Unknown" # বা আপনি একটি ডিফল্ট বছর সেট করতে পারেন
 
     file_id = None
     if message.video:
         file_id = message.video.file_id
-        print(f"Detected video, file_id: {file_id}") # ডিবাগিং
+        print(f"Detected video, file_id: {file_id}")
     elif message.document:
         file_id = message.document.file_id
-        print(f"Detected document, file_id: {file_id}") # ডিবাগিং
+        print(f"Detected document, file_id: {file_id}")
     
     if not file_id:
-        print("No video or document file_id found, skipping.") # ডিবাগিং
+        print("No video or document file_id found, skipping.")
         return
 
-    tmdb_info = get_tmdb_info(title, year)
+    # TMDB থেকে বিস্তারিত তথ্য আনুন
+    tmdb_data = get_tmdb_info(title, year)
+    
+    # নিশ্চিত করুন যে tmdb_data একটি ডিকশনারি এবং তাতে প্রয়োজনীয় কী আছে
+    # যদি TMDB থেকে title/year পরিবর্তন হয়ে আসে, তাহলে সেটাই ব্যবহার করুন
+    actual_title = tmdb_data.get("title", title)
+    actual_year = tmdb_data.get("year", year)
+    poster_url = tmdb_data.get("poster_url", "")
+    overview = tmdb_data.get("overview", "No overview available.")
 
-    movie_slug = f"{slugify(title)}-{year}"
-    print(f"Generated slug: {movie_slug}") # ডিবাগিং
+    movie_slug = f"{slugify(actual_title)}-{actual_year}"
+    print(f"Generated slug: {movie_slug}")
 
-    existing = collection.find_one({"title": title, "year": year}) 
+    current_time = datetime.now() 
+
+    existing = collection.find_one({"title": actual_title, "year": actual_year}) 
 
     quality_entry = {"quality": quality, "file_id": file_id}
 
     if existing:
-        print(f"Found existing movie: {existing['title']} ({existing['year']})") # ডিবাগিং
+        print(f"Found existing movie: {existing['title']} ({existing['year']})")
         quality_found = False
         for q in existing["qualities"]:
             if q["quality"] == quality:
                 q.update(quality_entry)
                 quality_found = True
-                print(f"Updated quality {quality} for existing movie.") # ডিবাগিং
+                print(f"Updated quality {quality} for existing movie.")
                 break
         if not quality_found:
             existing["qualities"].append(quality_entry)
-            print(f"Added new quality {quality} to existing movie.") # ডিবাগিং
+            print(f"Added new quality {quality} to existing movie.")
         
-        existing["slug"] = movie_slug
-        collection.update_one({"_id": existing["_id"]}, {"$set": existing})
-        print(f"Finished updating movie: {title} ({year})") # ডিবাগিং
+        # নিশ্চিত করুন যে সকল TMDB ডেটা আপডেট হচ্ছে
+        collection.update_one(
+            {"_id": existing["_id"]},
+            {"$set": {
+                "title": actual_title, # TMDB থেকে আসা আপডেটেড টাইটেল
+                "year": actual_year,   # TMDB থেকে আসা আপডেটেড বছর
+                "overview": overview,
+                "poster_url": poster_url,
+                "qualities": existing["qualities"], # কোয়ালিটি লিস্ট আপডেট সহ
+                "slug": movie_slug,
+                "last_updated": current_time 
+            }}
+        )
+        print(f"Finished updating movie: {actual_title} ({actual_year}) with TMDB info.")
     else:
-        print(f"Adding new movie: {title} ({year})") # ডিবাগিং
+        print(f"Adding new movie: {actual_title} ({actual_year})")
         collection.insert_one({
-            "title": title,
-            "year": year,
-            "language": "Unknown",
-            "overview": tmdb_info["overview"],
-            "poster_url": tmdb_info["poster_url"],
+            "title": actual_title,
+            "year": actual_year,
+            "language": "Unknown", # আপনার প্রয়োজন অনুযায়ী সেট করুন
+            "overview": overview,
+            "poster_url": poster_url,
             "qualities": [quality_entry],
-            "slug": movie_slug
+            "slug": movie_slug,
+            "created_at": current_time,
+            "last_updated": current_time
         })
-        print(f"Finished adding new movie: {title} ({year})") # ডিবাগিং
+        print(f"Finished adding new movie: {actual_title} ({actual_year}) with TMDB info.")
 
 # ===== Pyrogram Bot Handler for /start command =====
 @bot.on_message(filters.private & filters.command("start"))
 async def start_command_handler(client, message):
-    print(f"Received /start command from {message.from_user.id}") # ডিবাগিং
+    print(f"Received /start command from {message.from_user.id}")
     if len(message.command) > 1:
         action_param = message.command[1] 
-        print(f"Start command parameter: {action_param}") # ডিবাগিং
+        print(f"Start command parameter: {action_param}")
         
         if action_param.startswith("stream_"):
             file_id = action_param.replace("stream_", "", 1)
-            print(f"Action: Stream, File ID: {file_id}") # ডিবাগিং
+            print(f"Action: Stream, File ID: {file_id}")
             try:
                 await client.send_document(
                     chat_id=message.chat.id,
@@ -567,7 +622,7 @@ async def start_command_handler(client, message):
 
         elif action_param.startswith("download_"):
             file_id = action_param.replace("download_", "", 1)
-            print(f"Action: Download, File ID: {file_id}") # ডিবাগিং
+            print(f"Action: Download, File ID: {file_id}")
             try:
                 await client.send_document(
                     chat_id=message.chat.id,
@@ -579,10 +634,10 @@ async def start_command_handler(client, message):
                 await message.reply_text(f"দুঃখিত, ফাইলটি ডাউনলোড করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন। এরর: {e}")
                 print(f"Error sending download file {file_id}: {e}")
         else:
-            print(f"Unknown start command parameter: {action_param}") # ডিবাগিং
+            print(f"Unknown start command parameter: {action_param}")
             await message.reply_text("স্বাগতম! আপনি এখানে আপনার পছন্দের মুভি দেখতে বা ডাউনলোড করতে পারবেন।")
     else:
-        print("Received /start command without parameter.") # ডিবাগিং
+        print("Received /start command without parameter.")
         await message.reply_text("স্বাগতম! আপনি এখানে আপনার পছন্দের মুভি দেখতে বা ডাউনলোড করতে পারবেন।")
 
 
@@ -593,8 +648,8 @@ app.secret_key = os.urandom(24)
 # ===== Flask Routes =====
 @app.route("/")
 def home():
-    movies = list(collection.find())
-    print(f"Loaded {len(movies)} movies for home page.") # ডিবাগিং
+    movies = list(collection.find().sort([("last_updated", pymongo.DESCENDING), ("created_at", pymongo.DESCENDING)]))
+    print(f"Loaded {len(movies)} movies for home page, sorted by latest.")
     return render_template_string(INDEX_HTML, movies=movies)
 
 @app.route("/movie/<slug>")
@@ -602,74 +657,73 @@ def movie_detail(slug):
     movie = collection.find_one({"slug": slug})
     
     if not movie:
-        print(f"Movie not found for slug: {slug}") # ডিবাগিং
+        print(f"Movie not found for slug: {slug}")
         return abort(404)
     
-    print(f"Displaying movie detail for: {movie.get('title')} (Slug: {slug})") # ডিবাগিং
+    print(f"Displaying movie detail for: {movie.get('title')} (Slug: {slug})")
     return render_template_string(MOVIE_HTML, movie=movie)
 
 @app.route("/watch/<file_id>")
 def watch(file_id):
     redirect_url = f"https://t.me/{BOT_USERNAME}?start=stream_{file_id}"
-    print(f"Redirecting to watch URL: {redirect_url}") # ডিবাগিং
+    print(f"Redirecting to watch URL: {redirect_url}")
     return redirect(redirect_url)
 
 @app.route("/download/<file_id>")
 def download(file_id):
     redirect_url = f"https://t.me/{BOT_USERNAME}?start=download_{file_id}"
-    print(f"Redirecting to download URL: {redirect_url}") # ডিবাগিং
+    print(f"Redirecting to download URL: {redirect_url}")
     return redirect(redirect_url)
 
 # অ্যাডমিন লগইন এবং প্যানেল রুট
 @app.route("/admin", methods=["GET"])
 def admin_panel_or_login():
     if 'logged_in' in session and session['logged_in']:
-        movies = list(collection.find())
-        print("Admin logged in, displaying admin panel.") # ডিবাগিং
+        movies = list(collection.find().sort([("last_updated", pymongo.DESCENDING), ("created_at", pymongo.DESCENDING)]))
+        print("Admin logged in, displaying admin panel.")
         return render_template_string(ADMIN_HTML, movies=movies)
-    print("Admin not logged in, displaying login page.") # ডিবাগিং
+    print("Admin not logged in, displaying login page.")
     return render_template_string(LOGIN_HTML)
 
 @app.route("/admin/login", methods=["POST"])
 def admin_login():
     password = request.form.get("password")
-    print(f"Attempting admin login with password: {'*' * len(password)}") # ডিবাগিং (পাসওয়ার্ড সরাসরি প্রিন্ট না করে)
+    print(f"Attempting admin login with password: {'*' * len(password)}")
     if password == ADMIN_PASSWORD:
         session['logged_in'] = True
-        print("Admin login successful.") # ডিবাগিং
+        print("Admin login successful.")
         return redirect(url_for('admin_panel_or_login'))
-    print("Admin login failed: Invalid Password.") # ডিবাগিং
+    print("Admin login failed: Invalid Password.")
     return render_template_string(LOGIN_HTML, error="Invalid Password")
 
 @app.route("/admin/logout")
 def admin_logout():
     session.pop('logged_in', None)
-    print("Admin logged out.") # ডিবাগিং
+    print("Admin logged out.")
     return redirect(url_for('admin_panel_or_login'))
 
 @app.route("/admin/delete/<mid>")
 def delete(mid):
     if 'logged_in' not in session or not session['logged_in']:
-        print("Unauthorized attempt to delete movie.") # ডিবাগিং
+        print("Unauthorized attempt to delete movie.")
         return abort(403)
     try:
-        print(f"Attempting to delete movie with ID: {mid}") # ডিবাগিং
+        print(f"Attempting to delete movie with ID: {mid}")
         collection.delete_one({"_id": ObjectId(mid)})
-        print(f"Successfully deleted movie with ID: {mid}") # ডিবাগিং
+        print(f"Successfully deleted movie with ID: {mid}")
     except Exception as e:
-        print(f"Error deleting movie {mid}: {e}") # ডিবাগিং
+        print(f"Error deleting movie {mid}: {e}")
         return "Error deleting movie", 500
     return redirect(url_for('admin_panel_or_login'))
 
 # ===== RUN BOTH =====
 def run_flask_app():
-    print("Starting Flask app...") # ডিবাগিং
+    print("Starting Flask app...")
     app.run(host="0.0.0.0", port=5000, debug=False)
 
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask_app)
     flask_thread.start()
     
-    print("Starting Telegram Bot...") # ডিবাগিং
+    print("Starting Telegram Bot...")
     bot.run()
-
