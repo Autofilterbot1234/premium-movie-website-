@@ -94,7 +94,7 @@ INDEX_HTML = """
 
 MOVIE_HTML = """
 <!DOCTYPE html>
-<html><head><title>{{ movie.title }}</title></head><body><h1>{{ movie.title }} ({{ movie.year }})</h1><img src="{{ movie.poster_url }}"><p>{{ movie.overview }}</p><ul>{% for q in movie.qualities %}<li>{{ q.quality }}: <a href="{{ q.watch_url }}">Watch</a> | <a href="{{ q.download_url }}">Download</a></li>{% endfor %}</ul><a href="/">Back</a></body></html>
+<html><head><title>{{ movie.title }}</title></head><body><h1>{{ movie.title }} ({{ movie.year }})</h1><img src="{{ movie.poster_url }}"><p>{{ movie.overview }}</p><ul>{% for q in movie.qualities %}<li>{{ q.quality }}: <a href="{{ q.watch_url }}" target="_blank">Watch</a> | <a href="{{ q.download_url }}" target="_blank">Download</a></li>{% endfor %}</ul><a href="/">Back</a></body></html>
 """
 
 def get_slug(title, year):
@@ -107,7 +107,7 @@ def home():
         m["slug"] = get_slug(m["title"], m["year"])
     return render_template_string(INDEX_HTML, movies=movies)
 
-@app.route("/movie/<slug>")
+@app.route("/movie/<path:slug>")
 def movie_detail(slug):
     try:
         title_part = slug.rsplit("-", 1)[0]
