@@ -14,11 +14,12 @@ from datetime import datetime
 MONGO_URI = "mongodb+srv://manogog673:manogog673@cluster0.ot1qt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 TMDB_API_KEY = "7dc544d9253bccc3cfecc1c677f69819"
 CHANNEL_USERNAME = "autoposht" # আপনার চ্যানেলের সঠিক ইউজারনেম দিন, যেমন @your_channel
-BOT_USERNAME = "CtgAutoPostBot" # <<<<<<< এখানে আপনার বটের সঠিক ইউজারনেম দিন, যেমন @your_bot হলে শুধু "your_bot" লিখুন >>>>>>>
+# <<<<<<< এখানে আপনার বটের সঠিক ইউজারনেম দিন, "@" চিহ্ন সহকারে, যেমন @your_bot >>>>>>>
+BOT_USERNAME = "@CtgAutoPostBot" 
 API_ID = 22697010
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
-ADMIN_PASSWORD = "your_strong_admin_password_here" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
+ADMIN_PASSWORD = "Nahid270" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
 
 # ===== MongoDB Setup =====
 mongo = pymongo.MongoClient(MONGO_URI)
@@ -652,12 +653,14 @@ def movie_detail(slug):
 
 @app.route("/watch/<file_id>")
 def watch(file_id):
+    # BOT_USERNAME এ "@" চিহ্ন যোগ করা হয়েছে যাতে টেলিগ্রাম লিংক সঠিকভাবে কাজ করে।
     redirect_url = f"https://t.me/{BOT_USERNAME}?start=stream_{file_id}"
     print(f"Redirecting to watch URL: {redirect_url}")
     return redirect(redirect_url)
 
 @app.route("/download/<file_id>")
 def download(file_id):
+    # BOT_USERNAME এ "@" চিহ্ন যোগ করা হয়েছে যাতে টেলিগ্রাম লিংক সঠিকভাবে কাজ করে।
     redirect_url = f"https://t.me/{BOT_USERNAME}?start=download_{file_id}"
     print(f"Redirecting to download URL: {redirect_url}")
     return redirect(redirect_url)
@@ -706,11 +709,14 @@ def delete(mid):
 # ===== RUN BOTH =====
 def run_flask_app():
     print("Starting Flask app...")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    # debug=False রাখা হয়েছে প্রোডাকশন এনভায়রনমেন্টের জন্য।
+    app.run(host="0.0.0.0", port=5000, debug=False) 
 
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask_app)
     flask_thread.start()
     
     print("Starting Telegram Bot...")
+    # Pyrogram বটটি চালু করুন।
     bot.run()
+
