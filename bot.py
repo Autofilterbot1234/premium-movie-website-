@@ -15,7 +15,7 @@ BOT_USERNAME = "CtgAutoPostBot"
 API_ID = 22697010
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
-ADMIN_TOKEN = "admin123"  # পাসওয়ার্ড (সিম্পল টোকেন)
+ADMIN_TOKEN = "admin123"
 
 # ===== MongoDB Setup =====
 mongo = pymongo.MongoClient(MONGO_URI)
@@ -92,9 +92,69 @@ async def save_movie(client, message):
 # ===== Flask App =====
 app = Flask(__name__)
 
-INDEX_HTML = """<html><head><title>Movie List</title></head><body><h1>Movies</h1><ul>{% for movie in movies %}<li><a href='/movie/{{ movie.slug }}'>{{ movie.title }} ({{ movie.year }})</a></li>{% endfor %}</ul></body></html>"""
+INDEX_HTML = """
+<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\">
+  <title>MovieZone - All Movies</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: auto; padding: 20px; background-color: #f0f0f0; }
+    h1 { text-align: center; }
+    .movies-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap: 15px; }
+    .movie-card { text-decoration: none; color: #000; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; }
+    .movie-card:hover { transform: scale(1.03); }
+    .movie-card img { width: 100%; height: auto; }
+    .movie-title { padding: 10px; text-align: center; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>MovieZone - All Movies</h1>
+  <div class=\"movies-grid\">
+    {% for movie in movies %}
+    <a class=\"movie-card\" href=\"/movie/{{ movie.slug }}\">
+      <img src=\"{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}\" alt=\"{{ movie.title }}\">
+      <div class=\"movie-title\">{{ movie.title }} ({{ movie.year }})</div>
+    </a>
+    {% endfor %}
+  </div>
+</body>
+</html>
+"""
 
-MOVIE_HTML = """<html><head><title>{{ movie.title }}</title></head><body><h1>{{ movie.title }} ({{ movie.year }})</h1><img src='{{ movie.poster_url }}'><p>{{ movie.overview }}</p><ul>{% for q in movie.qualities %}<li>{{ q.quality }}: <a href='/watch/{{ q.file_id }}'>▶️ Watch</a> | <a href='/download/{{ q.file_id }}'>⬇️ Download</a></li>{% endfor %}</ul><a href='/'>Back</a></body></html>"""
+MOVIE_HTML = """
+<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\">
+  <title>{{ movie.title }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; background-color: #fdfdfd; padding: 20px; }
+    img { max-width: 300px; float: left; margin-right: 20px; border-radius: 8px; }
+    h1 { margin-top: 0; }
+    .clear { clear: both; }
+    .buttons { margin-top: 20px; }
+    .btn { display: inline-block; margin: 5px 10px; padding: 10px 20px; background: #007BFF; color: white; border-radius: 5px; text-decoration: none; }
+    .btn:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <h1>{{ movie.title }} ({{ movie.year }})</h1>
+  <img src=\"{{ movie.poster_url or 'https://via.placeholder.com/300x450?text=No+Image' }}\">
+  <p>{{ movie.overview }}</p>
+  <div class=\"clear\"></div>
+  <div class=\"buttons\">
+    {% for q in movie.qualities %}
+    <p><strong>{{ q.quality }}</strong>:
+      <a class=\"btn\" href=\"/watch/{{ q.file_id }}\">▶️ Watch</a>
+      <a class=\"btn\" href=\"/download/{{ q.file_id }}\">⬇️ Download</a>
+    </p>
+    {% endfor %}
+  </div>
+  <p><a href=\"/\">← Back to Home</a></p>
+</body>
+</html>
+"""
 
 ADMIN_HTML = """<html><head><title>Admin Panel</title></head><body><h1>Admin Panel</h1><ul>{% for movie in movies %}<li>{{ movie.title }} ({{ movie.year }}) <a href='/admin/delete/{{ movie._id }}?token={{ token }}'>❌ Delete</a></li>{% endfor %}</ul></body></html>"""
 
