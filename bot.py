@@ -6,7 +6,8 @@ import re
 import requests
 from flask import Flask, request, redirect, abort, render_template_string, session, url_for
 from slugify import slugify # নিশ্চিত করুন এটি ইনস্টল করা আছে: pip install python-slugify
-import os # সেশন সিক্রেট কী তৈরি করার জন্য
+import os
+from bson.objectid import ObjectId # ObjectId ইম্পোর্ট করুন
 
 # ===== CONFIGURATION =====
 MONGO_URI = "mongodb+srv://manogog673:manogog673@cluster0.ot1qt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -16,7 +17,7 @@ BOT_USERNAME = "CtgAutoPostBot" # আপনার বটের সঠিক ই�
 API_ID = 22697010
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
-ADMIN_PASSWORD = "Nahid270" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
+ADMIN_PASSWORD = "your_strong_admin_password_here" # এখানে আপনার শক্তিশালী অ্যাডমিন পাসওয়ার্ড দিন!
 
 # ===== MongoDB Setup =====
 mongo = pymongo.MongoClient(MONGO_URI)
@@ -26,7 +27,7 @@ collection = db["movies"]
 # ===== Pyrogram Bot Setup =====
 bot = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# ===== Template HTMLs =====
+# ===== Template HTMLs (আগের মতোই আছে, পরিবর্তন করা হয়নি) =====
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
@@ -37,7 +38,7 @@ INDEX_HTML = """
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: #e9ecef;
-            max-width: 1000px; /* ম্যাক্সিমাম উইডথ বাড়ানো হয়েছে */
+            max-width: 1000px;
             margin: auto;
             padding: 20px;
             color: #343a40;
@@ -47,61 +48,61 @@ INDEX_HTML = """
             text-align: center;
             color: #007bff;
             margin-bottom: 30px;
-            font-size: 2.5em; /* ফন্ট সাইজ বাড়ানো হয়েছে */
+            font-size: 2.5em;
             font-weight: 700;
         }
         .movies-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); /* মোবাইল: প্রতি সারিতে ২টা কার্ড (কমপক্ষে 160px) */
-            gap: 20px; /* গ্যাপ বাড়ানো হয়েছে */
-            padding: 0 10px; /* গ্রিডের চারপাশে প্যাডিং */
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 20px;
+            padding: 0 10px;
         }
         .movie-card {
             text-decoration: none;
             color: #343a40;
             background: white;
-            border-radius: 12px; /* বর্ডার রেডিয়াস বাড়ানো হয়েছে */
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.1); /* শ্যাডো আরও গভীর করা হয়েছে */
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            align-items: center; /* কন্টেন্ট সেন্টারে আনতে */
-            padding-bottom: 10px; /* টাইটেলের নিচে প্যাডিং */
+            align-items: center;
+            padding-bottom: 10px;
         }
         .movie-card:hover {
-            transform: translateY(-8px); /* হোভারে আরও উপরে উঠবে */
+            transform: translateY(-8px);
             box-shadow: 0 12px 25px rgba(0,0,0,0.2);
         }
         .movie-card img {
             width: 100%;
-            height: 240px; /* ফিক্সড হাইট, মোবাইল অনুসারে */
+            height: 240px;
             object-fit: cover;
             display: block;
             border-bottom: 1px solid #eee;
         }
         .movie-title {
-            padding: 10px 8px; /* প্যাডিং সামঞ্জস্য করা হয়েছে */
+            padding: 10px 8px;
             text-align: center;
-            font-weight: 600; /* ফন্ট ওয়েট বাড়ানো হয়েছে */
-            font-size: 0.95em; /* ফন্ট সাইজ সামঞ্জস্য করা হয়েছে */
+            font-weight: 600;
+            font-size: 0.95em;
             color: #495057;
             flex-grow: 1;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 40px; /* টাইটেল বক্সের মিনিমাম হাইট */
+            min-height: 40px;
         }
 
         /* Responsive adjustments */
-        @media (max-width: 599px) { /* 600px এর নিচে স্ক্রিনের জন্য (মোবাইল) */
+        @media (max-width: 599px) {
             .movies-grid {
-                grid-template-columns: repeat(2, 1fr); /* মোবাইলে প্রতি সারিতে ২টা কার্ড */
+                grid-template-columns: repeat(2, 1fr);
                 gap: 15px;
             }
             .movie-card img {
-                height: 200px; /* মোবাইলে ইমেজের হাইট */
+                height: 200px;
             }
             .movie-title {
                 font-size: 0.9em;
@@ -114,18 +115,18 @@ INDEX_HTML = """
             }
         }
 
-        @media (min-width: 600px) and (max-width: 991px) { /* ট্যাবলেট সাইজের জন্য */
+        @media (min-width: 600px) and (max-width: 991px) {
             .movies-grid {
-                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); /* প্রতি সারিতে ৩-৪টা কার্ড */
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
             }
             .movie-card img {
                 height: 270px;
             }
         }
 
-        @media (min-width: 992px) { /* ডেস্কটপ স্ক্রিনের জন্য */
+        @media (min-width: 992px) {
             .movies-grid {
-                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* প্রতি সারিতে ৪-৫টা কার্ড */
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             }
             .movie-card img {
                 height: 300px;
@@ -165,7 +166,7 @@ MOVIE_HTML = """
             background: #ffffff;
             color: #343a40;
             line-height: 1.6;
-            box-shadow: 0 0 15px rgba(0,0,0,0.05); /* বডির চারপাশে হালকা শ্যাডো */
+            box-shadow: 0 0 15px rgba(0,0,0,0.05);
             border-radius: 8px;
         }
         h1 {
@@ -178,13 +179,13 @@ MOVIE_HTML = """
         }
         .movie-content {
             display: flex;
-            flex-direction: column; /* মোবাইলের জন্য কলাম লেআউট */
+            flex-direction: column;
             align-items: center;
             margin-bottom: 25px;
-            text-align: center; /* ওভারভিউ টেক্সট সেন্টারে আনতে */
+            text-align: center;
         }
         .movie-content img {
-            max-width: 280px; /* মোবাইলের জন্য ইমেজের সাইজ */
+            max-width: 280px;
             height: auto;
             margin-bottom: 20px;
             border-radius: 10px;
@@ -193,9 +194,9 @@ MOVIE_HTML = """
             border: 1px solid #e0e0e0;
         }
         .movie-content p {
-            text-align: justify; /* ওভারভিউ টেক্সট জাস্টিফাই করা হয়েছে */
+            text-align: justify;
             margin: 0;
-            padding: 0 10px; /* সাইড প্যাডিং */
+            padding: 0 10px;
             font-size: 1.05em;
         }
         .quality-section {
@@ -212,13 +213,13 @@ MOVIE_HTML = """
             color: #007bff;
             font-size: 1.2em;
             font-weight: 600;
-            text-align: center; /* কোয়ালিটি টেক্সট সেন্টারে */
+            text-align: center;
         }
         .btn-group {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px; /* বাটনগুলির মধ্যে গ্যাপ */
-            justify-content: center; /* বাটনগুলোকে সেন্টারে আনতে */
+            gap: 12px;
+            justify-content: center;
             margin-top: 15px;
         }
         .btn {
@@ -254,7 +255,7 @@ MOVIE_HTML = """
         }
         
         /* Responsive adjustments */
-        @media (min-width: 600px) { /* 600px এর উপরে স্ক্রিনের জন্য (ডেস্কটপ/ট্যাবলেট) */
+        @media (min-width: 600px) {
             h1 {
                 text-align: left;
             }
@@ -317,7 +318,7 @@ ADMIN_HTML = """
         }
         h1 {
             text-align: center;
-            color: #dc3545; /* লাল রং অ্যাডমিনের জন্য */
+            color: #dc3545;
             margin-bottom: 30px;
             font-size: 2.2em;
             font-weight: 700;
@@ -340,7 +341,7 @@ ADMIN_HTML = """
         }
         li span {
             flex-grow: 1;
-            margin-right: 15px; /* টেক্সট এবং বাটনের মধ্যে গ্যাপ */
+            margin-right: 15px;
             font-weight: 500;
         }
         li a {
@@ -348,7 +349,7 @@ ADMIN_HTML = """
             text-decoration: none;
             font-weight: bold;
             padding: 8px 15px;
-            border: 2px solid #dc3545; /* বর্ডার মোটা করা হয়েছে */
+            border: 2px solid #dc3545;
             border-radius: 5px;
             transition: background 0.2s, color 0.2s, transform 0.2s;
             white-space: nowrap;
@@ -386,11 +387,11 @@ ADMIN_HTML = """
             }
             li span {
                 margin-right: 0;
-                margin-bottom: 10px; /* নিচে মার্জিন যোগ করা হয়েছে */
+                margin-bottom: 10px;
                 font-size: 0.95em;
             }
             li a {
-                align-self: stretch; /* বাটন পুরো প্রস্থে ছড়িয়ে যাবে */
+                align-self: stretch;
                 text-align: center;
             }
         }
@@ -418,7 +419,7 @@ LOGIN_HTML = """
     <title>Admin Login</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #333; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 10vh; margin: 0; color: #333; }
         .login-container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 90%; }
         h1 { color: #007bff; margin-bottom: 25px; font-size: 2em; }
         input[type="password"] { width: calc(100% - 20px); padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 5px; font-size: 1em; }
@@ -448,81 +449,111 @@ def extract_info(text):
     pattern = r"(.*?)(?:\s*(\d{4}))?\s*(?:\||-|–)?\s*(\d{3,4}p)"
     match = re.search(pattern, text, re.IGNORECASE)
     if match:
-        return match.group(1).strip(), match.group(2) or "0000", match.group(3)
+        title = match.group(1).strip()
+        year = match.group(2) or "0000" # যদি সাল না থাকে, ডিফল্ট "0000"
+        quality = match.group(3)
+        print(f"Extracted: Title='{title}', Year='{year}', Quality='{quality}'") # ডিবাগিং
+        return title, year, quality
+    print(f"Failed to extract info from caption: {text}") # ডিবাগিং
     return None, None, None
 
 def get_tmdb_info(title, year):
     try:
         url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={title}&year={year}"
+        print(f"Fetching TMDB info for: {title} ({year}) from URL: {url}") # ডিবাগিং
         res = requests.get(url).json()
+        print(f"TMDB API Response: {res}") # ডিবাগিং: TMDB থেকে কী রেসপন্স আসছে তা দেখুন
+
         if res.get("results"):
             m = res["results"][0]
+            poster_path = m.get('poster_path')
+            poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
+            overview = m.get("overview", "")
+            print(f"TMDB Success: Poster URL='{poster_url}', Overview='{overview}'") # ডিবাগিং
             return {
-                "poster_url": f"https://image.tmdb.org/t/p/w500{m.get('poster_path')}" if m.get('poster_path') else "",
-                "overview": m.get("overview", "")
+                "poster_url": poster_url,
+                "overview": overview
             }
+        else:
+            print(f"TMDB No results found for: {title} ({year})") # ডিবাগিং
     except Exception as e:
-        print(f"Error fetching TMDB info: {e}") # ডিবাগিং এর জন্য এরর প্রিন্ট করা হলো
+        print(f"Error fetching TMDB info for {title} ({year}): {e}") # ডিবাগিং এর জন্য এরর প্রিন্ট করা হলো
     return {"poster_url": "", "overview": ""}
 
 # ===== Pyrogram Bot Handler for Channel Posts =====
 @bot.on_message(filters.channel & (filters.video | filters.document))
 async def save_movie(client, message):
+    print(f"Received message in channel: {message.chat.id}") # ডিবাগিং
     if not message.caption:
+        print("Message has no caption, skipping.") # ডিবাগিং
         return
 
     title, year, quality = extract_info(message.caption)
     if not title or not quality:
-        print(f"Could not extract info from caption: {message.caption}") # ডিবাগিং এর জন্য
+        print(f"Could not extract info from caption: '{message.caption}', skipping.") # ডিবাগিং
         return
 
-    file_id = message.video.file_id if message.video else message.document.file_id
+    file_id = None
+    if message.video:
+        file_id = message.video.file_id
+        print(f"Detected video, file_id: {file_id}") # ডিবাগিং
+    elif message.document:
+        file_id = message.document.file_id
+        print(f"Detected document, file_id: {file_id}") # ডিবাগিং
+    
+    if not file_id:
+        print("No video or document file_id found, skipping.") # ডিবাগিং
+        return
+
     tmdb_info = get_tmdb_info(title, year)
 
-    # সিনেমার জন্য একটি ইউনিক স্ল্যাগ তৈরি করুন
     movie_slug = f"{slugify(title)}-{year}"
+    print(f"Generated slug: {movie_slug}") # ডিবাগিং
 
-    # ডেটাবেসে একই টাইটেল এবং সাল এর মুভি আছে কিনা চেক করুন
     existing = collection.find_one({"title": title, "year": year}) 
 
     quality_entry = {"quality": quality, "file_id": file_id}
 
     if existing:
-        # বিদ্যমান মুভির ক্ষেত্রে কোয়ালিটি আপডেট বা যোগ করুন
+        print(f"Found existing movie: {existing['title']} ({existing['year']})") # ডিবাগিং
         quality_found = False
         for q in existing["qualities"]:
             if q["quality"] == quality:
                 q.update(quality_entry)
                 quality_found = True
+                print(f"Updated quality {quality} for existing movie.") # ডিবাগিং
                 break
         if not quality_found:
             existing["qualities"].append(quality_entry)
+            print(f"Added new quality {quality} to existing movie.") # ডিবাগিং
         
-        # নিশ্চিত করুন যে slug field আছে এবং আপডেটেড (যদি title বা year পরিবর্তন হয়)
         existing["slug"] = movie_slug
         collection.update_one({"_id": existing["_id"]}, {"$set": existing})
-        print(f"Updated existing movie: {title} ({year})") # ডিবাগিং
+        print(f"Finished updating movie: {title} ({year})") # ডিবাগিং
     else:
-        # নতুন মুভি ডেটাবেসে যোগ করুন
+        print(f"Adding new movie: {title} ({year})") # ডিবাগিং
         collection.insert_one({
             "title": title,
             "year": year,
-            "language": "Unknown", # আপনার প্রয়োজন অনুযায়ী সেট করুন
+            "language": "Unknown",
             "overview": tmdb_info["overview"],
             "poster_url": tmdb_info["poster_url"],
             "qualities": [quality_entry],
-            "slug": movie_slug # এখানে slug সংরক্ষণ করা হচ্ছে
+            "slug": movie_slug
         })
-        print(f"Added new movie: {title} ({year})") # ডিবাগিং
+        print(f"Finished adding new movie: {title} ({year})") # ডিবাগিং
 
 # ===== Pyrogram Bot Handler for /start command =====
 @bot.on_message(filters.private & filters.command("start"))
 async def start_command_handler(client, message):
+    print(f"Received /start command from {message.from_user.id}") # ডিবাগিং
     if len(message.command) > 1:
         action_param = message.command[1] 
+        print(f"Start command parameter: {action_param}") # ডিবাগিং
         
         if action_param.startswith("stream_"):
             file_id = action_param.replace("stream_", "", 1)
+            print(f"Action: Stream, File ID: {file_id}") # ডিবাগিং
             try:
                 await client.send_document(
                     chat_id=message.chat.id,
@@ -536,6 +567,7 @@ async def start_command_handler(client, message):
 
         elif action_param.startswith("download_"):
             file_id = action_param.replace("download_", "", 1)
+            print(f"Action: Download, File ID: {file_id}") # ডিবাগিং
             try:
                 await client.send_document(
                     chat_id=message.chat.id,
@@ -547,21 +579,22 @@ async def start_command_handler(client, message):
                 await message.reply_text(f"দুঃখিত, ফাইলটি ডাউনলোড করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন। এরর: {e}")
                 print(f"Error sending download file {file_id}: {e}")
         else:
+            print(f"Unknown start command parameter: {action_param}") # ডিবাগিং
             await message.reply_text("স্বাগতম! আপনি এখানে আপনার পছন্দের মুভি দেখতে বা ডাউনলোড করতে পারবেন।")
     else:
+        print("Received /start command without parameter.") # ডিবাগিং
         await message.reply_text("স্বাগতম! আপনি এখানে আপনার পছন্দের মুভি দেখতে বা ডাউনলোড করতে পারবেন।")
 
 
 # ===== Flask App Setup =====
 app = Flask(__name__)
-# সেশন সিক্রেট কী - এটি খুব গুরুত্বপূর্ণ! একটি র্যান্ডম এবং শক্তিশালী কী দিন।
-# প্রোডাকশনে এটি এনভায়রনমেন্ট ভেরিয়েবল থেকে আসা উচিত।
-app.secret_key = os.urandom(24) # একটি র্যান্ডম সিক্রেট কী তৈরি করবে
+app.secret_key = os.urandom(24)
 
 # ===== Flask Routes =====
 @app.route("/")
 def home():
     movies = list(collection.find())
+    print(f"Loaded {len(movies)} movies for home page.") # ডিবাগিং
     return render_template_string(INDEX_HTML, movies=movies)
 
 @app.route("/movie/<slug>")
@@ -572,61 +605,71 @@ def movie_detail(slug):
         print(f"Movie not found for slug: {slug}") # ডিবাগিং
         return abort(404)
     
+    print(f"Displaying movie detail for: {movie.get('title')} (Slug: {slug})") # ডিবাগিং
     return render_template_string(MOVIE_HTML, movie=movie)
 
 @app.route("/watch/<file_id>")
 def watch(file_id):
-    return redirect(f"https://t.me/{BOT_USERNAME}?start=stream_{file_id}")
+    redirect_url = f"https://t.me/{BOT_USERNAME}?start=stream_{file_id}"
+    print(f"Redirecting to watch URL: {redirect_url}") # ডিবাগিং
+    return redirect(redirect_url)
 
 @app.route("/download/<file_id>")
 def download(file_id):
-    return redirect(f"https://t.me/{BOT_USERNAME}?start=download_{file_id}")
+    redirect_url = f"https://t.me/{BOT_USERNAME}?start=download_{file_id}"
+    print(f"Redirecting to download URL: {redirect_url}") # ডিবাগিং
+    return redirect(redirect_url)
 
 # অ্যাডমিন লগইন এবং প্যানেল রুট
 @app.route("/admin", methods=["GET"])
 def admin_panel_or_login():
     if 'logged_in' in session and session['logged_in']:
         movies = list(collection.find())
+        print("Admin logged in, displaying admin panel.") # ডিবাগিং
         return render_template_string(ADMIN_HTML, movies=movies)
+    print("Admin not logged in, displaying login page.") # ডিবাগিং
     return render_template_string(LOGIN_HTML)
 
 @app.route("/admin/login", methods=["POST"])
 def admin_login():
     password = request.form.get("password")
+    print(f"Attempting admin login with password: {'*' * len(password)}") # ডিবাগিং (পাসওয়ার্ড সরাসরি প্রিন্ট না করে)
     if password == ADMIN_PASSWORD:
         session['logged_in'] = True
-        return redirect(url_for('admin_panel_or_login')) # লগইন সফল হলে অ্যাডমিন প্যানেলে রিডাইরেক্ট
+        print("Admin login successful.") # ডিবাগিং
+        return redirect(url_for('admin_panel_or_login'))
+    print("Admin login failed: Invalid Password.") # ডিবাগিং
     return render_template_string(LOGIN_HTML, error="Invalid Password")
 
 @app.route("/admin/logout")
 def admin_logout():
-    session.pop('logged_in', None) # সেশন থেকে লগইন তথ্য মুছে ফেলা
-    return redirect(url_for('admin_panel_or_login')) # লগইন পেজে রিডাইরেক্ট
+    session.pop('logged_in', None)
+    print("Admin logged out.") # ডিবাগিং
+    return redirect(url_for('admin_panel_or_login'))
 
 @app.route("/admin/delete/<mid>")
 def delete(mid):
     if 'logged_in' not in session or not session['logged_in']:
-        return abort(403) # লগইন না থাকলে অ্যাক্সেস Deny
+        print("Unauthorized attempt to delete movie.") # ডিবাগিং
+        return abort(403)
     try:
-        from bson.objectid import ObjectId # ObjectId ইম্পোর্ট করুন
+        print(f"Attempting to delete movie with ID: {mid}") # ডিবাগিং
         collection.delete_one({"_id": ObjectId(mid)})
+        print(f"Successfully deleted movie with ID: {mid}") # ডিবাগিং
     except Exception as e:
         print(f"Error deleting movie {mid}: {e}") # ডিবাগিং
         return "Error deleting movie", 500
-    return redirect(url_for('admin_panel_or_login')) # সফলভাবে ডিলিট হলে অ্যাডমিন প্যানেলে রিডাইরেক্ট
+    return redirect(url_for('admin_panel_or_login'))
 
 # ===== RUN BOTH =====
 def run_flask_app():
-    # Flask অ্যাপকে হোস্ট 0.0.0.0 এ এবং পোর্ট 5000 এ চালান
-    # এটি Heroku বা অন্যান্য ক্লাউড প্ল্যাটফর্মে ডেপ্লয় করার জন্য উপযুক্ত।
-    # ডিবাগ মোড ডেভেলপমেন্টের জন্য ভালো, প্রোডাকশনের জন্য বন্ধ রাখা উচিত।
+    print("Starting Flask app...") # ডিবাগিং
     app.run(host="0.0.0.0", port=5000, debug=False)
 
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask_app)
     flask_thread.start()
     
-    # টেলিগ্রাম বট চালান
-    print("Starting Telegram Bot...")
+    print("Starting Telegram Bot...") # ডিবাগিং
     bot.run()
 
