@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html>
+<head><title>Admin Panel</title></head>
+<body>
+  <h1>Admin Panel</h1>
+  {% for movie in movies %}
+    <p>{{ movie.title }} ({{ movie.year }}) — 
+      <a href="/admin/delete/{{ movie
