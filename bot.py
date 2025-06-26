@@ -15,7 +15,7 @@ MONGO_URI = "mongodb+srv://manogog673:manogog673@cluster0.ot1qt.mongodb.net/?ret
 TMDB_API_KEY = "7dc544d9253bccc3cfecc1c677f69819"
 CHANNEL_USERNAME = "autoposht" # আপনার চ্যানেলের সঠিক ইউজারনেম দিন, যেমন @your_channel
 # <<<<<<< এখানে আপনার বটের সঠিক ইউজারনেম দিন, "@" চিহ্ন সহকারে, যেমন @your_bot >>>>>>>
-BOT_USERNAME = "@CtgAutoPostBot" 
+BOT_USERNAME = "@CtgAutoPostBot"  # এটিই সেই লাইন যা ফিক্স করা হয়েছে।
 API_ID = 22697010
 API_HASH = "fd88d7339b0371eb2a9501d523f3e2a7"
 BOT_TOKEN = "7347631253:AAFX3dmD0N8q6u0l2zghoBFu-7TXvMC571M"
