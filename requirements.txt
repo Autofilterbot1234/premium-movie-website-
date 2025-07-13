@@ -1,7 +1,4 @@
-tgcrypto
 pyrogram
-pymongo
-Flask
-python-slugify
+tgcrypto
 requests
-python-dotenv
+beautifulsoup4
